@@ -2527,10 +2527,20 @@ function buildGradeCard(){
   const STD={
     '벤치프레스':isM?[0.5,0.75,1.0,1.5,2.0]:[0.35,0.5,0.7,1.0,1.4],
     '스쿼트':   isM?[0.75,1.25,1.5,2.0,2.75]:[0.5,0.75,1.25,1.5,2.0],
-    '데드리프트':isM?[1.0,1.5,2.0,2.5,3.0]:[0.5,1.0,1.25,1.75,2.5]
+    '데드리프트':isM?[1.0,1.5,2.0,2.5,3.0]:[0.5,1.0,1.25,1.75,2.5],
+    '오버헤드프레스':isM?[0.35,0.55,0.8,1.1,1.4]:[0.2,0.35,0.5,0.75,1.0],
+    '바벨로우':isM?[0.5,0.75,1.0,1.4,1.8]:[0.3,0.5,0.7,1.0,1.4],
+    '레그프레스':isM?[1.0,1.5,2.5,3.5,5.0]:[0.7,1.2,2.0,2.8,4.0]
   };
-  const ALIAS={'벤치':'벤치프레스','bench':'벤치프레스','스쿼트':'스쿼트','squat':'스쿼트',
-    '데드':'데드리프트','데드리프트':'데드리프트','deadlift':'데드리프트'};
+  /* 핵심 종목 별칭 — 초보가 다양하게 적어도 잡히도록 (인클라인 벤치→벤치 등) */
+  const ALIAS={
+    '벤치':'벤치프레스','bench':'벤치프레스','인클라인':'벤치프레스','체스트프레스':'벤치프레스',
+    '스쿼트':'스쿼트','squat':'스쿼트','백스쿼트':'스쿼트','프론트스쿼트':'스쿼트','하이바':'스쿼트','로우바':'스쿼트',
+    '데드':'데드리프트','데드리프트':'데드리프트','deadlift':'데드리프트','rdl':'데드리프트','루마니안':'데드리프트',
+    '오버헤드':'오버헤드프레스','ohp':'오버헤드프레스','숄더프레스':'오버헤드프레스','밀리터리':'오버헤드프레스','어깨프레스':'오버헤드프레스',
+    '바벨로우':'바벨로우','벤트오버':'바벨로우','로우':'바벨로우','row':'바벨로우',
+    '레그프레스':'레그프레스','legpress':'레그프레스','하체프레스':'레그프레스'
+  };
   const levelLabels=['입문','초급','중급','상급','엘리트'];
   /* 맨몸운동: 한 세트 최대 횟수 기준표 [입문,초급,중급,상급,엘리트] */
   const BODY={
@@ -2654,6 +2664,30 @@ function buildGradeCard(){
     aeScore=(qualScore!=null)?Math.round(volScore*0.6+qualScore*0.4):volScore;
   }
 
+  /* ---- 3-b) 하이록스(HYROX) — 완주 시간 기반 별도 평가 ---- */
+  /* 종목명에 하이록스/HYROX/록스가 들어간 기록의 완주 시간(분)으로 레벨 산정 */
+  let hyroxTxt='', hyroxScore=null;
+  const hyroxLogs=ws.filter(w=>{
+    const n=(w.exercise||'').toLowerCase().replace(/\s/g,'');
+    return n.includes('하이록스')||n.includes('hyrox')||n.includes('록스');
+  }).filter(w=>w.duration>0);
+  if(hyroxLogs.length){
+    /* 가장 빠른(작은) 완주 시간 */
+    const best=Math.min(...hyroxLogs.map(w=>w.duration));
+    /* 오픈 디비전 완주시간 기준표(분): 빠를수록 상급 [입문,초급,중급,상급,엘리트] */
+    /* 약 60분=엘리트, 75=상급, 90=중급, 105=초급, 120+=입문 (성별 보정) */
+    const HX=isM?[120,105,90,75,60]:[135,120,105,90,75];
+    let lv=0;for(let i=0;i<HX.length;i++){if(best<=HX[i])lv=i;}
+    hyroxScore=Math.min(100,Math.round((HX[0]/best)*60)); /* 빠를수록 높음 */
+    hyroxScore=Math.max(20,Math.min(100,hyroxScore));
+    const hh=Math.floor(best/60), mm=Math.round(best%60);
+    const tstr=hh>0?`${hh}시간 ${mm}분`:`${mm}분`;
+    hyroxTxt=`완주 ${tstr} · ${levelLabels[lv]}`;
+    /* 하이록스 점수는 유산소 점수에 합산 반영 (둘 중 높은 쪽 70% + 낮은 쪽 30%) */
+    if(aeScore==null){aeScore=hyroxScore;}
+    else{const hi=Math.max(aeScore,hyroxScore),lo=Math.min(aeScore,hyroxScore);aeScore=Math.round(hi*0.7+lo*0.3);}
+  }
+
   /* ---- 4) 운동량(볼륨) 계수 — 맛보기 수준이면 점수 감쇄 ---- */
   /* 이번 주 무산소 총 세트 + 유산소 시간(분)을 합산해 '주간 활동량' 추정 */
   const weekWs=ws.filter(w=>(now-new Date(w.created_at).getTime())<7*86400000);
@@ -2694,6 +2728,9 @@ function buildGradeCard(){
   /* 유산소 속도(질) 안내 */
   const aeHint=aeSpeedTxt?
     `<div class="gc-row"><span>유산소 강도</span><span><b>${aeSpeedTxt}</b></span></div>`:'';
+  /* 하이록스 안내 */
+  const hyroxHint=hyroxTxt?
+    `<div class="gc-row"><span>🔥 하이록스</span><span><b>${hyroxTxt}</b></span></div>`:'';
 
   return `<div class="grade-card ${grade.cls}">
     <div class="gc-top">
@@ -2704,7 +2741,7 @@ function buildGradeCard(){
         <div class="gc-sub">${subBits.join(' · ')}</div>
       </div>
     </div>
-    <div class="gc-detail">${strList}${strHint}${bmiTxt?`<div class="gc-row"><span>${bodyBasis||'BMI'}</span><span>${bmiTxt}</span></div>`:''}${aeHint}${volHint}</div>
+    <div class="gc-detail">${strList}${strHint}${bmiTxt?`<div class="gc-row"><span>${bodyBasis||'BMI'}</span><span>${bmiTxt}</span></div>`:''}${aeHint}${hyroxHint}${volHint}</div>
     <div class="gc-note">전 세계 표준 기준표(체중 대비 근력비·체성분·WHO 유산소 권장량)로
       산정한 참고용 등급이에요. 근력은 벤치·스쿼트·데드리프트 무게 기록으로,
       운동량이 쌓일수록 점수가 정확·상승해요.</div>
