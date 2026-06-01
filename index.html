@@ -1207,8 +1207,13 @@ async function googleLogin(){
 async function logout(){
   await db.auth.signOut();
   state.user=null;state.nick='';
+  state.workouts=[];state.profile=null;state.weights=[];state.inbody=[];
+  state.voiceChat=[];state.chat=[];
   paintNick();renderFeed();
   if(state.view==='detail')renderDetail();
+  /* 현재 보고 있는 탭을 즉시 다시 그려 로그아웃 상태 반영 */
+  if(document.getElementById('tab-assistant').classList.contains('on'))renderVoice();
+  if(document.getElementById('tab-status').classList.contains('on'))renderSubPane();
   toast('로그아웃 했어요');
 }
 /* 로그인 안내 모달 (글쓰기/댓글 시도 시) */
