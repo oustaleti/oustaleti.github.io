@@ -27,11 +27,9 @@
   .iab-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:20px;
     color:#0A0A0A;margin-bottom:12px;}
   .iab-desc{font-size:13.5px;line-height:1.7;color:#666;margin-bottom:22px;}
-  .iab-steps{text-align:left;background:#F6F6F4;border-radius:14px;padding:14px 16px;margin-bottom:18px;}
-  .iab-step{font-size:13.5px;line-height:1.5;color:#333;display:flex;gap:9px;align-items:flex-start;}
-  .iab-step+.iab-step{margin-top:10px;}
-  .iab-step span{flex:none;width:21px;height:21px;border-radius:50%;background:#22b2e0;color:#fff;
-    font-size:12px;font-weight:800;display:grid;place-items:center;margin-top:1px;}
+  .iab-steps{background:#F6F6F4;border-radius:14px;padding:16px;margin-bottom:18px;}
+  .iab-step-simple{font-size:15px;font-weight:700;color:#0A0A0A;text-align:center;line-height:1.5;}
+  .iab-step-simple b{color:#22b2e0;}
   .iab-btn{width:100%;background:#22b2e0;color:#fff;border:none;border-radius:12px;
     padding:15px;font-size:15px;font-weight:800;cursor:pointer;margin-bottom:9px;}
   .iab-copy{width:100%;background:#F0F4F6;color:#22b2e0;border:none;border-radius:12px;
@@ -586,8 +584,7 @@
       제한돼요. 아래 안내를 따라 크롬/사파리로 열어주세요.</div>
     <!-- 아이폰 단계 안내 (JS가 표시) -->
     <div class="iab-steps" id="iabSteps" style="display:none">
-      <div class="iab-step"><span>1</span> 오른쪽 위·아래의 <b>메뉴(↗ 또는 ⋯)</b>를 누르세요</div>
-      <div class="iab-step"><span>2</span> <b>'Safari로 열기'</b> 또는 <b>'기본 브라우저로 열기'</b>를 선택하세요</div>
+      <div class="iab-step-simple">하단 메뉴 <b>↗</b> → <b>Safari로 열기</b></div>
     </div>
     <button class="iab-btn" id="iabOpen">크롬으로 열기</button>
     <button class="iab-copy" id="iabCopy">주소 복사하기</button>
@@ -3101,7 +3098,7 @@ function goBack(){
       /* 아이폰: 자동 열기 불가 → 단계 안내 표시, '크롬으로 열기' 버튼 숨김 */
       if(steps)steps.style.display='block';
       if(openBtn)openBtn.style.display='none';
-      if(desc)desc.textContent='카카오톡 안에서는 구글 로그인이 제한돼요. 아래 순서대로 Safari에서 열어주세요.';
+      if(desc)desc.textContent='카카오톡에서는 로그인이 제한돼요. Safari로 열어주세요.';
       if(copyBtn)copyBtn.textContent='또는, 주소 복사하기';
     }
     if(copyBtn)copyBtn.onclick=async()=>{
