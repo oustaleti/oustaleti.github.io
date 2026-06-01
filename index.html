@@ -380,9 +380,12 @@
   .ai-msg.assistant{align-self:flex-start;background:#F0F4F6;color:var(--ink);
     border-bottom-left-radius:5px;}
   .ai-welcome{text-align:center;padding:24px 18px;color:var(--muted);}
+  .ai-w-headline{font-family:'Bricolage Grotesque';font-weight:800;font-size:20px;
+    color:var(--ink);line-height:1.4;margin-bottom:22px;letter-spacing:-.01em;}
   .ai-w-emoji{font-size:36px;margin-bottom:10px;}
   .ai-w-title{font-family:'Bricolage Grotesque';font-weight:800;font-size:17px;
     color:var(--ink);margin-bottom:7px;}
+  .ai-w-lead{font-size:14px;font-weight:700;color:var(--blue);margin-bottom:12px;}
   .ai-w-desc{font-size:13px;line-height:1.7;}
   .ai-input-row{display:flex;gap:7px;margin-top:12px;align-items:flex-end;}
   .ai-input-row textarea{flex:1;border:1.5px solid var(--line);border-radius:12px;
@@ -2293,11 +2296,14 @@ function renderVoice(){
     <div class="voice-screen">
       <div class="voice-msgs" id="voiceMsgs">${msgs||`
         <div class="ai-welcome">
+          <div class="ai-w-headline">적는 것도 번거롭습니다.<br>말해서 기록하세요.</div>
           <div class="ai-w-emoji">🎙️</div>
           <div class="ai-w-title">마이크를 누르고 말해보세요</div>
-          <div class="ai-w-desc">"오늘 벤치 80kg 다섯 세트 했어"<br>
-            "오늘 컨디션 별로인데 쉬는 게 나을까?"<br>
-            비서가 듣고 답해드려요.</div>
+          <div class="ai-w-lead">당신의 운동 기록을 알려주세요</div>
+          <div class="ai-w-desc">"벤치프레스 100kg 10회 5세트,<br>
+            자전거 라이딩 100km 4시간" 처럼<br>
+            오늘 수행한 운동을 말하면<br>
+            기록하고 분석하여 등급을 산정합니다.</div>
         </div>`}</div>
       <div class="voice-status" id="voiceStatus"></div>
       <button class="mic-btn" id="micBtn" aria-label="말하기">
