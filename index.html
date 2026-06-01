@@ -1152,8 +1152,13 @@ function renderStatus(){
     return;
   }
   const p=state.profile||{};
+  /* 목표는 콤마로 저장 — 기존 값을 배열로 분리 */
+  const savedGoals=(p.goal||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const presetVals=GOALS.map(g=>g.v);
+  /* 프리셋에 없는 목표 = 직접 입력한 것 */
+  const customGoals=savedGoals.filter(g=>!presetVals.includes(g));
   const goalChips=GOALS.map(g=>
-    `<button type="button" class="pf-chip ${p.goal===g.v?'on':''}" data-goal="${g.v}">${g.label}</button>`
+    `<button type="button" class="pf-chip ${savedGoals.includes(g.v)?'on':''}" data-goal="${g.v}">${g.label}</button>`
   ).join('');
   const expChips=EXPS.map(e=>
     `<button type="button" class="pf-chip ${p.experience===e.v?'on':''}" data-exp="${e.v}">${e.label}</button>`
@@ -1199,9 +1204,14 @@ function renderStatus(){
         <div class="pf-chips" id="pfExp">${expChips}</div>
       </div>
 
-      <div class="pf-sec-title" style="margin-top:18px">목표</div>
-      <div class="pf-field" style="margin-bottom:16px">
+      <div class="pf-sec-title" style="margin-top:18px">목표 <span style="font-weight:600;color:var(--muted);font-size:11px">· 여러 개 선택 가능</span></div>
+      <div class="pf-field" style="margin-bottom:12px">
         <div class="pf-chips" id="pfGoal">${goalChips}</div>
+      </div>
+      <div class="pf-field" style="margin-bottom:16px">
+        <label>직접 입력 (쉼표로 여러 개)</label>
+        <input id="pfGoalCustom" type="text" maxlength="100"
+          placeholder="예: 마라톤 완주, 체지방 15%" value="${esc(customGoals.join(', '))}">
       </div>
 
       <div class="pf-field" style="margin-bottom:18px">
@@ -1214,7 +1224,7 @@ function renderStatus(){
       <div class="pf-saved-note" id="pfSavedNote">${p.updated_at?'마지막 저장: '+ago(p.updated_at):''}</div>
     </div>`;
 
-  /* 칩 선택 (단일 선택) */
+  /* 단일 선택 칩 (성별, 경력) */
   function chipGroup(id,attr){
     const box=document.getElementById(id);
     box.querySelectorAll('.pf-chip').forEach(c=>{
@@ -1224,9 +1234,16 @@ function renderStatus(){
       };
     });
   }
+  /* 다중 선택 칩 (목표) */
+  function chipMulti(id){
+    const box=document.getElementById(id);
+    box.querySelectorAll('.pf-chip').forEach(c=>{
+      c.onclick=()=>c.classList.toggle('on');
+    });
+  }
   chipGroup('pfSex','sex');
   chipGroup('pfExp','exp');
-  chipGroup('pfGoal','goal');
+  chipMulti('pfGoal');
 
   document.getElementById('pfSave').onclick=saveProfile;
 }
@@ -1239,6 +1256,11 @@ async function saveProfile(){
     return on?on.dataset[attr]:null;
   };
   const num=v=>{const n=parseFloat(v);return isNaN(n)?null:n;};
+  /* 목표: 선택한 칩 + 직접입력 칸을 합쳐 콤마로 (중복 제거) */
+  const goalPicks=[...document.querySelectorAll('#pfGoal .pf-chip.on')].map(c=>c.dataset.goal);
+  const goalCustom=document.getElementById('pfGoalCustom').value
+    .split(',').map(s=>s.trim()).filter(Boolean);
+  const allGoals=[...new Set([...goalPicks,...goalCustom])];
   const row={
     user_id:state.user.id,
     nickname:document.getElementById('pfNick').value.trim()||null,
@@ -1247,7 +1269,7 @@ async function saveProfile(){
     weight:num(document.getElementById('pfWeight').value),
     sex:pick('pfSex','sex')||null,
     experience:pick('pfExp','exp'),
-    goal:pick('pfGoal','goal'),
+    goal:allGoals.length?allGoals.join(','):null,
     note:document.getElementById('pfNote').value.trim()||null,
     updated_at:new Date().toISOString()
   };
