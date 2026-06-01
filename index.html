@@ -434,10 +434,9 @@
   @keyframes aiblink{0%,60%,100%{opacity:.25;}30%{opacity:1;}}
 
   /* ===== 음성 비서 ===== */
-  .voice-screen{padding:20px 20px 40px;display:flex;flex-direction:column;align-items:center;
-    justify-content:center;min-height:calc(100vh - 200px);}
-  /* 대화가 있을 땐 위에서부터 (중앙정렬 해제) */
-  .voice-screen.has-chat{justify-content:flex-start;min-height:0;padding-top:20px;}
+  .voice-screen{padding:64px 20px 40px;display:flex;flex-direction:column;align-items:center;}
+  /* 대화가 있을 땐 위에서부터 */
+  .voice-screen.has-chat{padding-top:20px;}
   .voice-msgs{width:100%;display:flex;flex-direction:column;gap:9px;}
   .voice-screen.has-chat .voice-msgs{flex:1;overflow-y:auto;max-height:50vh;margin-bottom:20px;}
   .voice-status{min-height:2px;}
@@ -3208,23 +3207,30 @@ function swipeTab(dir){
 (async function init(){
   renderTabs();
   document.getElementById('feed').innerHTML='<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
-  await loadUser();
-  await loadProfile();
-  await loadWorkouts();
-  await loadRaces();
-  await loadWeights();
-  await loadInbody();
-  state.admin=lget('ost_admin')==='1';
-  try{const lk=lget('ost_liked');if(lk)state.liked=new Set(JSON.parse(lk));}catch(e){}
-  try{const rp=lget('ost_reported');if(rp)state.reported=new Set(JSON.parse(rp));}catch(e){}
-  paintNick();paintAdmin();
-  if(state.admin)await loadReports();
-  await loadThreads();
-  renderFeed();
-  /* 새로고침 시 마지막 화면 유지 (없으면 비서 탭) */
+  /* 저장된 마지막 탭을 먼저 띄워 빈 화면 방지 */
   const savedSub=lget('ost_sub'); if(savedSub==='dash'||savedSub==='profile')state.sub=savedSub;
   const savedTab=lget('ost_tab');
-  switchTab((savedTab==='community'||savedTab==='status'||savedTab==='assistant')?savedTab:'assistant');
+  const startTab=(savedTab==='community'||savedTab==='status'||savedTab==='assistant')?savedTab:'assistant';
+  switchTab(startTab);
+  /* 데이터 로드 (하나라도 실패해도 화면은 유지) */
+  try{
+    await loadUser();
+    await loadProfile();
+    await loadWorkouts();
+    await loadRaces();
+    await loadWeights();
+    await loadInbody();
+    state.admin=lget('ost_admin')==='1';
+    try{const lk=lget('ost_liked');if(lk)state.liked=new Set(JSON.parse(lk));}catch(e){}
+    try{const rp=lget('ost_reported');if(rp)state.reported=new Set(JSON.parse(rp));}catch(e){}
+    paintNick();paintAdmin();
+    if(state.admin)await loadReports();
+    await loadThreads();
+  }catch(e){console.error('초기 로드 중 오류',e);}
+  /* 데이터 반영해서 현재 탭 다시 그리기 */
+  renderFeed();
+  if(startTab==='assistant')renderVoice();
+  else if(startTab==='status')renderSubPane();
   /* 로그인 상태 변화 감지 (구글 로그인 후 돌아왔을 때) */
   db.auth.onAuthStateChange(async()=>{
     await loadUser();
