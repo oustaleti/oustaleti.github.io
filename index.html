@@ -225,16 +225,38 @@
   .wk-empty{text-align:center;color:var(--muted);font-size:13.5px;padding:24px 0;}
 
   /* ===== 요약 카드 (운동 기록 상단) ===== */
-  .sum-grid{display:flex;gap:9px;margin-bottom:20px;}
-  .sum-card{flex:1;background:var(--card);border:1px solid var(--line);
-    border-radius:14px;padding:14px 12px;text-align:center;box-shadow:var(--shadow);}
-  .sum-card .sc-label{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:7px;}
+  .sum-grid{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:20px;}
+  .sum-card{flex:1 1 calc(50% - 5px);min-width:0;background:var(--card);
+    border:1px solid var(--line);border-radius:14px;padding:14px 12px;
+    text-align:center;box-shadow:var(--shadow);}
+  .sum-card .sc-label{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:7px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .sum-card .sc-main{font-family:'Bricolage Grotesque';font-weight:800;
     font-size:22px;letter-spacing:-.02em;line-height:1;color:var(--ink);}
   .sum-card .sc-sub{font-size:11px;font-weight:700;margin-top:6px;color:var(--muted);}
   .sc-sub.up{color:var(--blue);}
   .sc-sub.down{color:#C0392B;}
   .sum-card.race .sc-main{color:var(--blue);}
+
+  /* 대회 일정 입력/목록 */
+  .race-add-row{display:flex;gap:6px;margin-top:8px;}
+  .race-add-row #raceName{flex:1.3;border:1.5px solid var(--line);border-radius:9px;
+    padding:9px 10px;font-family:inherit;font-size:13.5px;}
+  .race-add-row #raceDate{flex:1;border:1.5px solid var(--line);border-radius:9px;
+    padding:9px 8px;font-family:inherit;font-size:13px;color:var(--ink);}
+  .race-add-row #raceName:focus,.race-add-row #raceDate:focus{outline:none;border-color:var(--blue);}
+  .race-add-btn{flex:none;background:var(--ink);color:#fff;border-radius:9px;
+    padding:0 14px;font-size:13.5px;font-weight:800;}
+  .race-add-btn:hover{background:var(--blue);}
+  .race-empty{font-size:12.5px;color:var(--muted);padding:4px 2px 8px;}
+  .race-item{display:flex;align-items:center;gap:10px;background:#F6F6F4;
+    border-radius:10px;padding:10px 12px;margin-bottom:7px;}
+  .race-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+  .race-nm{font-size:13.5px;font-weight:800;}
+  .race-dt{font-size:11.5px;color:var(--muted);font-weight:700;}
+  .race-del{flex:none;color:var(--muted);font-size:17px;width:26px;height:26px;
+    border-radius:7px;transition:.12s;}
+  .race-del:hover{background:#FCE9E6;color:#C0392B;}
   .clamp{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;}
   .card-actions{display:flex;gap:18px;align-items:center;
     border-top:1px dashed var(--line);padding-top:10px;}
@@ -501,7 +523,7 @@ const catOf=id=>CATS.find(c=>c.id===id)||CATS[5];
 
 let state={cat:'all',sort:'recent',threads:[],nick:'',liked:new Set(),
   view:'feed',thread:null,composeCat:'road',admin:false,user:null,
-  reported:new Set(),reports:[],profile:null,workouts:[],wkType:'무산소'};
+  reported:new Set(),reports:[],profile:null,workouts:[],wkType:'무산소',races:[]};
 
 /* ---------- 닉네임/좋아요 = 이 브라우저에만 저장 ---------- */
 function lget(k){try{return localStorage.getItem(k);}catch(e){return null;}}
@@ -1254,9 +1276,14 @@ function renderStatus(){
         <input id="pfGoalCustom" type="text" maxlength="100"
           placeholder="예: 마라톤 완주, 체지방 15%" value="${esc(customGoals.join(', '))}">
       </div>
-      <div class="pf-field" id="pfRaceWrap" style="margin-bottom:16px;display:${savedGoals.includes('대회준비')?'flex':'none'}">
-        <label>🏁 대회 날짜 (D-day 계산용)</label>
-        <input id="pfRaceDate" type="date" value="${p.race_date||''}">
+      <div id="pfRaceWrap" style="margin-bottom:16px;display:${savedGoals.includes('대회준비')?'block':'none'}">
+        <label style="font-size:12.5px;font-weight:700;color:var(--muted);display:block;margin-bottom:8px">🏁 대회 일정 (여러 개 가능)</label>
+        <div id="raceList"></div>
+        <div class="race-add-row">
+          <input id="raceName" type="text" maxlength="30" placeholder="대회 이름 (예: 춘천마라톤)">
+          <input id="raceDate" type="date">
+          <button type="button" class="race-add-btn" id="raceAddBtn">추가</button>
+        </div>
       </div>
 
       <div class="pf-field" style="margin-bottom:18px">
@@ -1285,9 +1312,9 @@ function renderStatus(){
     box.querySelectorAll('.pf-chip').forEach(c=>{
       c.onclick=()=>{
         c.classList.toggle('on');
-        /* 대회준비 선택 여부에 따라 대회 날짜칸 표시 */
+        /* 대회준비 선택 여부에 따라 대회 일정 영역 표시 */
         if(c.dataset.goal==='대회준비'){
-          document.getElementById('pfRaceWrap').style.display=c.classList.contains('on')?'flex':'none';
+          document.getElementById('pfRaceWrap').style.display=c.classList.contains('on')?'block':'none';
         }
       };
     });
@@ -1297,6 +1324,73 @@ function renderStatus(){
   chipMulti('pfGoal');
 
   document.getElementById('pfSave').onclick=saveProfile;
+  /* 대회 일정 */
+  renderRaceList();
+  const rab=document.getElementById('raceAddBtn');
+  if(rab)rab.onclick=addRace;
+}
+
+/* ---------- 대회 일정 (여러 개) ---------- */
+async function loadRaces(){
+  if(!state.user){state.races=[];return;}
+  try{
+    const {data}=await db.from('races').select('*')
+      .eq('user_id',state.user.id).order('race_date',{ascending:true});
+    state.races=data||[];
+  }catch(e){state.races=[];}
+}
+function renderRaceList(){
+  const box=document.getElementById('raceList');
+  if(!box)return;
+  if(!state.races.length){
+    box.innerHTML=`<div class="race-empty">아직 등록한 대회가 없어요.</div>`;
+    return;
+  }
+  const today=new Date(new Date().toDateString());
+  box.innerHTML=state.races.map(r=>{
+    const t=new Date(r.race_date+'T00:00:00');
+    const d=Math.ceil((t-today)/86400000);
+    const dtxt=d>0?`D-${d}`:(d===0?'D-DAY':`종료`);
+    return `<div class="race-item">
+      <div class="race-info">
+        <span class="race-nm">${esc(r.name||'대회')}</span>
+        <span class="race-dt">${r.race_date} · ${dtxt}</span>
+      </div>
+      <button type="button" class="race-del" data-race="${r.id}">&times;</button>
+    </div>`;
+  }).join('');
+  box.querySelectorAll('[data-race]').forEach(b=>{
+    b.onclick=()=>delRace(b.dataset.race);
+  });
+}
+async function addRace(){
+  if(!state.user)return;
+  const nm=document.getElementById('raceName').value.trim();
+  const dt=document.getElementById('raceDate').value;
+  if(!nm){toast('대회 이름을 입력해주세요');return;}
+  if(!dt){toast('대회 날짜를 골라주세요');return;}
+  try{
+    const {data,error}=await db.from('races')
+      .insert({user_id:state.user.id,name:nm,race_date:dt}).select();
+    if(error)throw error;
+    if(data&&data[0]){
+      state.races.push(data[0]);
+      state.races.sort((a,b)=>a.race_date.localeCompare(b.race_date));
+    }
+    document.getElementById('raceName').value='';
+    document.getElementById('raceDate').value='';
+    renderRaceList();
+    toast('대회를 추가했어요');
+  }catch(e){console.error(e);toast('추가에 실패했어요');}
+}
+async function delRace(id){
+  try{
+    const {error}=await db.from('races').delete().eq('id',id);
+    if(error)throw error;
+    state.races=state.races.filter(r=>String(r.id)!==String(id));
+    renderRaceList();
+    toast('대회를 삭제했어요');
+  }catch(e){console.error(e);toast('삭제에 실패했어요');}
 }
 
 async function saveProfile(){
@@ -1312,8 +1406,6 @@ async function saveProfile(){
   const goalCustom=document.getElementById('pfGoalCustom').value
     .split(',').map(s=>s.trim()).filter(Boolean);
   const allGoals=[...new Set([...goalPicks,...goalCustom])];
-  const raceEl=document.getElementById('pfRaceDate');
-  const raceDate=(allGoals.includes('대회준비')&&raceEl&&raceEl.value)?raceEl.value:null;
   const row={
     user_id:state.user.id,
     nickname:document.getElementById('pfNick').value.trim()||null,
@@ -1323,7 +1415,6 @@ async function saveProfile(){
     sex:pick('pfSex','sex')||null,
     experience:pick('pfExp','exp'),
     goal:allGoals.length?allGoals.join(','):null,
-    race_date:raceDate,
     note:document.getElementById('pfNote').value.trim()||null,
     updated_at:new Date().toISOString()
   };
@@ -1404,17 +1495,50 @@ function buildSummary(){
     }
   }
 
-  /* 3) 대회 D-day */
+  /* 3) 예상 소모 칼로리 (이번 주, MET 추정) */
+  const weight=(state.profile&&state.profile.weight)?state.profile.weight:70; /* 체중 없으면 70kg 가정 */
+  /* 운동별 MET 계수 (대략) */
+  const metOf=w=>{
+    const ex=(w.exercise||'').toLowerCase();
+    if(w.type==='유산소'){
+      if(ex.includes('러닝')||ex.includes('run')||ex.includes('달리')) return 9.8;
+      if(ex.includes('자전거')||ex.includes('사이클')||ex.includes('bike')||ex.includes('cycl')) return 7.5;
+      if(ex.includes('수영')||ex.includes('swim')) return 8.0;
+      if(ex.includes('걷')||ex.includes('walk')) return 3.5;
+      return 7.0; /* 기타 유산소 */
+    }
+    return 5.0; /* 무산소 웨이트 평균 */
+  };
+  /* 시간(분): 유산소는 duration, 무산소는 세트당 약 3분 추정 */
+  const minsOf=w=>{
+    if(w.type==='유산소') return w.duration||0;
+    return (w.sets||0)*3;
+  };
+  let kcal=0;
+  thisWk.forEach(w=>{
+    const mins=minsOf(w);
+    if(mins>0) kcal += metOf(w)*weight*(mins/60); /* MET*kg*hour */
+  });
+  kcal=Math.round(kcal);
+  const kcalCard=`<div class="sum-card">
+    <div class="sc-label">이번 주 소모</div>
+    <div class="sc-main" style="font-size:19px">${kcal>0?kcal.toLocaleString():'—'}</div>
+    <div class="sc-sub">${kcal>0?'kcal · 예상치':'기록하면 계산'}</div></div>`;
+
+  /* 4) 대회 D-day — 가장 가까운(다가오는) 대회 */
   let raceCard='';
-  const rd=state.profile&&state.profile.race_date;
-  if(rd){
-    const target=new Date(rd+'T00:00:00');
-    const dleft=Math.ceil((target-new Date(now.toDateString()))/dayMs);
-    const dtxt=dleft>0?`D-${dleft}`:(dleft===0?'D-DAY':`D+${Math.abs(dleft)}`);
+  const today=new Date(now.toDateString());
+  const upcoming=(state.races||[])
+    .map(r=>({...r,t:new Date(r.race_date+'T00:00:00')}))
+    .filter(r=>r.t>=today)
+    .sort((a,b)=>a.t-b.t)[0];
+  if(upcoming){
+    const dleft=Math.ceil((upcoming.t-today)/dayMs);
+    const dtxt=dleft>0?`D-${dleft}`:'D-DAY';
     raceCard=`<div class="sum-card race">
-      <div class="sc-label">🏁 대회</div>
+      <div class="sc-label">🏁 ${esc((upcoming.name||'대회').slice(0,6))}</div>
       <div class="sc-main">${dtxt}</div>
-      <div class="sc-sub">${rd.slice(5).replace('-','/')}</div></div>`;
+      <div class="sc-sub">${upcoming.race_date.slice(5).replace('-','/')}</div></div>`;
   }
 
   return `<div class="sum-grid">
@@ -1428,6 +1552,7 @@ function buildSummary(){
       <div class="sc-main" style="font-size:${perfMain==='—'?'22px':'15px'}">${perfMain}</div>
       <div class="sc-sub ${perfCls}">${perfSub}</div>
     </div>
+    ${kcalCard}
     ${raceCard}
   </div>`;
 }
@@ -1618,6 +1743,7 @@ document.getElementById('replyPhotoIn').onchange=function(){
   await loadUser();
   await loadProfile();
   await loadWorkouts();
+  await loadRaces();
   state.admin=lget('ost_admin')==='1';
   try{const lk=lget('ost_liked');if(lk)state.liked=new Set(JSON.parse(lk));}catch(e){}
   try{const rp=lget('ost_reported');if(rp)state.reported=new Set(JSON.parse(rp));}catch(e){}
@@ -1630,6 +1756,7 @@ document.getElementById('replyPhotoIn').onchange=function(){
     await loadUser();
     await loadProfile();
     await loadWorkouts();
+    await loadRaces();
     paintNick();
     if(state.view==='detail')renderDetail();else renderFeed();
     if(document.getElementById('tab-status').classList.contains('on'))renderStatus();
