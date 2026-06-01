@@ -1215,17 +1215,18 @@ async function googleLogin(){
 }
 window.googleLogin=googleLogin;
 async function logout(){
-  /* 서버 로그아웃 시도 (실패해도 로컬은 무조건 정리) */
-  try{ await db.auth.signOut(); }catch(e){ console.error('signOut 오류',e); }
+  /* 1) 로컬 상태부터 즉시 정리 (서버 응답을 기다리지 않음) */
   state.user=null;state.nick='';
   state.workouts=[];state.profile=null;state.weights=[];state.inbody=[];
   state.voiceChat=[];state.chat=[];state.races=[];
   state.view='feed';state.thread=null;
-  paintNick();
+  /* 2) 화면 즉시 갱신 + 비서 홈으로 이동 */
+  try{ paintNick(); }catch(e){}
   try{ renderFeed(); }catch(e){}
-  /* 로그아웃하면 무조건 홈(비서 탭)으로 이동 */
-  try{ switchTab('assistant'); }catch(e){ console.error('로그아웃 후 이동 오류',e); }
+  try{ switchTab('assistant'); }catch(e){ console.error('로그아웃 이동 오류',e); }
   toast('로그아웃 했어요');
+  /* 3) 서버 세션 정리는 백그라운드로 (실패해도 화면엔 영향 없음) */
+  try{ db.auth.signOut(); }catch(e){ console.error('signOut 오류',e); }
 }
 /* 로그인 안내 모달 (글쓰기/댓글 시도 시) */
 function openLoginPrompt(){
