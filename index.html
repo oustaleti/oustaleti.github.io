@@ -2510,13 +2510,13 @@ function buildGradeCard(){
   const isM=(sex!=='여');
   const oneRM=w=>w.weight==null?null:w.weight*(1+(w.reps||1)/30);
 
-  /* 데이터 충분한지 — 체중 + 무산소 기록 최소 1개 */
-  const anyStrength=ws.some(w=>w.type==='무산소'&&w.weight!=null);
-  if(!bw||!anyStrength){
+  /* 데이터 충분한지 — 체중 + 운동 기록 최소 1개(무산소든 유산소든) */
+  const anyWorkout=ws.length>0;
+  if(!bw||!anyWorkout){
     return `<div class="grade-card locked">
       <div class="gc-emoji">📋</div>
       <div class="gc-locktitle">아직 등급을 매길 수 없어요</div>
-      <div class="gc-lockdesc">${!bw?'프로필에 체중을 입력하고, ':''}무산소(웨이트) 운동을
+      <div class="gc-lockdesc">${!bw?'프로필에 체중을 입력하고, ':''}운동을
         한 번 이상 기록하면 — 전 세계 표준 기준으로 내 몸의 등급을 책정해드려요.</div>
     </div>`;
   }
@@ -2540,7 +2540,7 @@ function buildGradeCard(){
     const rm=oneRM(w);
     if(STD[key]&&(bestRM[key]==null||rm>bestRM[key]))bestRM[key]=rm;
   });
-  let strScore=null, strDetail=[];
+  let strScore=null, strDetail=[], strUnmeasured=false;
   const keys=Object.keys(bestRM);
   if(keys.length){
     let sum=0;
@@ -2556,6 +2556,10 @@ function buildGradeCard(){
       strDetail.push({k,ratio:ratio.toFixed(2),lv:levelLabels[lv]});
     });
     strScore=Math.round(sum/keys.length);
+  }else{
+    /* 3대 운동(벤치·스쿼트·데드) 무게 기록이 없으면 근력 미측정 → 0점으로 반영 */
+    strScore=0;
+    strUnmeasured=true;
   }
 
   /* ---- 2) 체성분 점수: 인바디 체지방률 우선, 없으면 BMI ---- */
@@ -2593,9 +2597,20 @@ function buildGradeCard(){
   let aeScore=null;
   if(weekAe.length){aeScore=Math.min(100,Math.round((aeMin/150)*100));}
 
+  /* ---- 4) 운동량(볼륨) 계수 — 맛보기 수준이면 점수 감쇄 ---- */
+  /* 이번 주 무산소 총 세트 + 유산소 시간(분)을 합산해 '주간 활동량' 추정 */
+  const weekWs=ws.filter(w=>(now-new Date(w.created_at).getTime())<7*86400000);
+  const weekSets=weekWs.filter(w=>w.type==='무산소').reduce((s,w)=>s+(w.sets||1),0);
+  const weekAeMin=weekWs.filter(w=>w.type==='유산소').reduce((s,w)=>s+(w.duration||0),0);
+  /* 활동 점수: 무산소 1세트=1점, 유산소 10분=1점 (대략) */
+  const activity=weekSets+(weekAeMin/10);
+  /* 권장 주간 활동량(약 30점 기준=충분)에 비례한 계수 0.5~1.0 */
+  const volFactor=Math.max(0.5,Math.min(1,activity/30));
+
   /* ---- 종합 ---- */
   const parts=[strScore,bmiScore,aeScore].filter(v=>v!=null);
-  const total=Math.round(parts.reduce((a,b)=>a+b,0)/parts.length);
+  const base=parts.reduce((a,b)=>a+b,0)/parts.length;
+  const total=Math.round(base*volFactor);
   /* 등급 환산 */
   const grade=
     total>=90?{g:'S',label:'엘리트',cls:'gs'}:
@@ -2605,13 +2620,20 @@ function buildGradeCard(){
               {g:'D',label:'입문',cls:'gd'};
 
   const subBits=[];
-  if(strScore!=null)subBits.push(`근력 ${strScore}`);
+  if(strUnmeasured)subBits.push('근력 미측정(0)');
+  else if(strScore!=null)subBits.push(`근력 ${strScore}`);
   if(bmiScore!=null)subBits.push(`체성분 ${bmiScore}`);
   if(aeScore!=null)subBits.push(`유산소 ${aeScore}`);
 
   const strList=strDetail.map(s=>
     `<div class="gc-row"><span>${esc(s.k)}</span>
      <span>체중 ${s.ratio}배 · <b>${s.lv}</b></span></div>`).join('');
+  /* 근력 미측정 안내 행 */
+  const strHint=strUnmeasured?
+    `<div class="gc-row"><span>근력</span><span>벤치·스쿼트·데드 무게 기록 시 반영</span></div>`:'';
+  /* 볼륨 감쇄 안내 */
+  const volHint=(volFactor<1)?
+    `<div class="gc-row"><span>운동량</span><span>아직 적어요 (점수 ${Math.round(volFactor*100)}% 반영)</span></div>`:'';
 
   return `<div class="grade-card ${grade.cls}">
     <div class="gc-top">
@@ -2622,9 +2644,10 @@ function buildGradeCard(){
         <div class="gc-sub">${subBits.join(' · ')}</div>
       </div>
     </div>
-    ${strList?`<div class="gc-detail">${strList}${bmiTxt?`<div class="gc-row"><span>${bodyBasis||'BMI'}</span><span>${bmiTxt}</span></div>`:''}</div>`:''}
-    <div class="gc-note">전 세계 표준 기준표(체중 대비 근력비·BMI·WHO 유산소 권장량)로
-      산정한 참고용 등급이에요. 데이터가 쌓일수록 정확해져요.</div>
+    <div class="gc-detail">${strList}${strHint}${bmiTxt?`<div class="gc-row"><span>${bodyBasis||'BMI'}</span><span>${bmiTxt}</span></div>`:''}${volHint}</div>
+    <div class="gc-note">전 세계 표준 기준표(체중 대비 근력비·체성분·WHO 유산소 권장량)로
+      산정한 참고용 등급이에요. 근력은 벤치·스쿼트·데드리프트 무게 기록으로,
+      운동량이 쌓일수록 점수가 정확·상승해요.</div>
   </div>`;
 }
 
