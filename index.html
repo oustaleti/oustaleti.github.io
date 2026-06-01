@@ -257,6 +257,40 @@
   .race-del{flex:none;color:var(--muted);font-size:17px;width:26px;height:26px;
     border-radius:7px;transition:.12s;}
   .race-del:hover{background:#FCE9E6;color:#C0392B;}
+
+  /* ===== 체중 추적 카드 ===== */
+  .wt-card{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:20px 18px;box-shadow:var(--shadow);margin-top:14px;}
+  .wt-input-row{display:flex;gap:6px;margin-bottom:16px;}
+  .wt-input-row #wtDate{flex:1.1;border:1.5px solid var(--line);border-radius:9px;
+    padding:10px 8px;font-family:inherit;font-size:13px;color:var(--ink);}
+  .wt-input-row #wtWeight{flex:1.4;border:1.5px solid var(--line);border-radius:9px;
+    padding:10px 12px;font-family:inherit;font-size:14px;}
+  .wt-input-row input:focus{outline:none;border-color:var(--blue);}
+  .wt-add-btn{flex:none;background:var(--blue);color:#fff;border-radius:9px;
+    padding:0 16px;font-size:14px;font-weight:800;}
+  .wt-hint{font-size:12.5px;color:var(--muted);line-height:1.6;
+    background:#F6F6F4;border-radius:10px;padding:13px 14px;}
+  .wt-goal-row{display:flex;justify-content:space-between;font-size:12.5px;
+    color:var(--muted);font-weight:700;margin-bottom:9px;}
+  .wt-goal-row b{color:var(--ink);font-size:14px;}
+  .wt-bar{height:12px;background:#EDEDEA;border-radius:999px;overflow:hidden;}
+  .wt-bar-fill{height:100%;background:var(--blue);border-radius:999px;transition:width .4s;}
+  .wt-goal-foot{display:flex;justify-content:space-between;font-size:12.5px;
+    font-weight:700;color:var(--muted);margin-top:9px;}
+  .wt-pct{color:var(--blue);}
+  .wt-predict{margin-top:12px;font-size:12.5px;font-weight:700;color:var(--ink);
+    background:#EAF7FC;border-radius:10px;padding:10px 13px;}
+  .wt-recent-head{font-size:11.5px;font-weight:800;color:var(--muted);
+    margin:18px 0 9px;letter-spacing:.03em;}
+  .wt-recent{display:flex;flex-direction:column;gap:5px;}
+  .wt-rec-item{display:flex;justify-content:space-between;align-items:center;
+    font-size:13px;padding:7px 11px;background:#F6F6F4;border-radius:8px;}
+  .wt-rec-date{color:var(--muted);font-weight:700;}
+  .wt-rec-w{font-weight:800;}
+  .wt-d{font-size:11px;font-weight:800;margin-left:5px;}
+  .wt-d.down{color:var(--blue);}
+  .wt-d.up{color:#C0392B;}
   .clamp{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;}
   .card-actions{display:flex;gap:18px;align-items:center;
     border-top:1px dashed var(--line);padding-top:10px;}
@@ -523,7 +557,7 @@ const catOf=id=>CATS.find(c=>c.id===id)||CATS[5];
 
 let state={cat:'all',sort:'recent',threads:[],nick:'',liked:new Set(),
   view:'feed',thread:null,composeCat:'road',admin:false,user:null,
-  reported:new Set(),reports:[],profile:null,workouts:[],wkType:'무산소',races:[]};
+  reported:new Set(),reports:[],profile:null,workouts:[],wkType:'무산소',races:[],weights:[]};
 
 /* ---------- 닉네임/좋아요 = 이 브라우저에만 저장 ---------- */
 function lget(k){try{return localStorage.getItem(k);}catch(e){return null;}}
@@ -1286,6 +1320,16 @@ function renderStatus(){
         </div>
       </div>
 
+      <div id="pfTargetWrap" style="margin-bottom:16px;display:${savedGoals.includes('체중감량')?'block':'none'}">
+        <label style="font-size:12.5px;font-weight:700;color:var(--muted);display:block;margin-bottom:8px">🎯 목표 체중</label>
+        <div class="pf-row">
+          <div class="pf-field"><label>목표 (kg)</label>
+            <input id="pfTargetW" type="number" min="30" max="200" step="0.1" placeholder="예: 73" value="${p.target_weight??''}"></div>
+          <div class="pf-field"><label>목표 날짜</label>
+            <input id="pfTargetD" type="date" value="${p.target_date||''}"></div>
+        </div>
+      </div>
+
       <div class="pf-field" style="margin-bottom:18px">
         <label>비서가 알아야 할 점 (선택)</label>
         <textarea id="pfNote" rows="3" maxlength="300"
@@ -1294,7 +1338,10 @@ function renderStatus(){
 
       <button class="pf-save" id="pfSave">저장하기</button>
       <div class="pf-saved-note" id="pfSavedNote">${p.updated_at?'마지막 저장: '+ago(p.updated_at):''}</div>
-    </div>`;
+    </div>
+
+    <!-- 체중 추적 카드 -->
+    <div class="wt-card" id="wtCard"></div>`;
 
   /* 단일 선택 칩 (성별, 경력) */
   function chipGroup(id,attr){
@@ -1316,6 +1363,10 @@ function renderStatus(){
         if(c.dataset.goal==='대회준비'){
           document.getElementById('pfRaceWrap').style.display=c.classList.contains('on')?'block':'none';
         }
+        /* 체중감량 선택 여부에 따라 목표 체중 영역 표시 */
+        if(c.dataset.goal==='체중감량'){
+          document.getElementById('pfTargetWrap').style.display=c.classList.contains('on')?'block':'none';
+        }
       };
     });
   }
@@ -1328,6 +1379,8 @@ function renderStatus(){
   renderRaceList();
   const rab=document.getElementById('raceAddBtn');
   if(rab)rab.onclick=addRace;
+  /* 체중 추적 */
+  renderWeightCard();
 }
 
 /* ---------- 대회 일정 (여러 개) ---------- */
@@ -1393,6 +1446,120 @@ async function delRace(id){
   }catch(e){console.error(e);toast('삭제에 실패했어요');}
 }
 
+/* ---------- 체중 추적 ---------- */
+async function loadWeights(){
+  if(!state.user){state.weights=[];return;}
+  try{
+    const {data}=await db.from('weights').select('*')
+      .eq('user_id',state.user.id).order('log_date',{ascending:true});
+    state.weights=data||[];
+  }catch(e){state.weights=[];}
+}
+function renderWeightCard(){
+  const box=document.getElementById('wtCard');
+  if(!box)return;
+  const ws=state.weights.slice().sort((a,b)=>a.log_date.localeCompare(b.log_date));
+  const p=state.profile||{};
+  const target=p.target_weight;
+  const start=ws.length?ws[0].weight:null;
+  const cur=ws.length?ws[ws.length-1].weight:null;
+
+  /* 진행률 계산 */
+  let progressHtml='';
+  if(target!=null&&start!=null&&cur!=null){
+    const totalChange=start-target;        /* 줄여야 할 양 (양수=감량) */
+    const doneChange=start-cur;            /* 지금까지 변화 */
+    let pct = totalChange!==0 ? Math.round((doneChange/totalChange)*100) : 100;
+    pct=Math.max(0,Math.min(100,pct));
+    const remain=(cur-target);
+    const remainTxt = Math.abs(remain)<0.05 ? '목표 달성! 🎉'
+      : (remain>0?`${remain.toFixed(1)}kg 남음`:`목표보다 ${Math.abs(remain).toFixed(1)}kg 아래`);
+    /* 도달 예측 — 최근 추세 */
+    let predict='';
+    if(ws.length>=2&&remain>0){
+      const first=ws[0], last=ws[ws.length-1];
+      const days=Math.max(1,(new Date(last.log_date)-new Date(first.log_date))/86400000);
+      const rate=(first.weight-last.weight)/days; /* kg/일 (양수=감량중) */
+      if(rate>0.001){
+        const daysLeft=Math.ceil(remain/rate);
+        const eta=new Date(); eta.setDate(eta.getDate()+daysLeft);
+        predict=`이 속도면 ${eta.getMonth()+1}월 ${eta.getDate()}일쯤 도달`;
+      }else{
+        predict='최근 변화가 적어요 — 꾸준히 가봐요';
+      }
+    }
+    progressHtml=`
+      <div class="wt-goal">
+        <div class="wt-goal-row">
+          <span>시작 ${start}kg</span><span>현재 <b>${cur}kg</b></span><span>목표 ${target}kg</span>
+        </div>
+        <div class="wt-bar"><div class="wt-bar-fill" style="width:${pct}%"></div></div>
+        <div class="wt-goal-foot">
+          <span class="wt-pct">${pct}% 달성</span>
+          <span>${remainTxt}</span>
+        </div>
+        ${predict?`<div class="wt-predict">📈 ${predict}</div>`:''}
+      </div>`;
+  }else if(target==null){
+    progressHtml=`<div class="wt-hint">프로필에서 "체중감량" 목표와 목표 체중을 설정하면,
+      여기에 진행률이 표시돼요.</div>`;
+  }else{
+    progressHtml=`<div class="wt-hint">오늘 몸무게를 입력하면 목표까지 진행률이 계산돼요.</div>`;
+  }
+
+  /* 최근 추이 (마지막 7개) */
+  let recent='';
+  if(ws.length){
+    const last7=ws.slice(-7);
+    recent=`<div class="wt-recent-head">최근 기록</div>
+      <div class="wt-recent">`+last7.map((w,i)=>{
+        const prev=i>0?last7[i-1].weight:null;
+        const diff=prev!=null?(w.weight-prev):null;
+        const dtag=diff==null?'':(diff<0?`<span class="wt-d down">▼${Math.abs(diff).toFixed(1)}</span>`
+          :diff>0?`<span class="wt-d up">▲${diff.toFixed(1)}</span>`:`<span class="wt-d">-</span>`);
+        return `<div class="wt-rec-item">
+          <span class="wt-rec-date">${w.log_date.slice(5).replace('-','/')}</span>
+          <span class="wt-rec-w">${w.weight}kg ${dtag}</span></div>`;
+      }).join('')+`</div>`;
+  }
+
+  box.innerHTML=`
+    <div class="pf-sec-title" style="margin-bottom:14px">⚖️ 체중 추적</div>
+    <div class="wt-input-row">
+      <input id="wtDate" type="date" value="${todayStr()}">
+      <input id="wtWeight" type="number" min="30" max="200" step="0.1" placeholder="오늘 몸무게 (kg)">
+      <button class="wt-add-btn" id="wtAddBtn">기록</button>
+    </div>
+    ${progressHtml}
+    ${recent}`;
+
+  document.getElementById('wtAddBtn').onclick=addWeight;
+}
+async function addWeight(){
+  if(!state.user)return;
+  const dt=document.getElementById('wtDate').value||todayStr();
+  const w=parseFloat(document.getElementById('wtWeight').value);
+  if(isNaN(w)){toast('몸무게를 입력해주세요');return;}
+  try{
+    /* 같은 날 기록이 있으면 갱신, 없으면 추가 */
+    const existing=state.weights.find(x=>x.log_date===dt);
+    if(existing){
+      const {error}=await db.from('weights').delete().eq('id',existing.id);
+      if(error)throw error;
+      state.weights=state.weights.filter(x=>x.id!==existing.id);
+    }
+    const {data,error}=await db.from('weights')
+      .insert({user_id:state.user.id,log_date:dt,weight:w}).select();
+    if(error)throw error;
+    if(data&&data[0])state.weights.push(data[0]);
+    /* 프로필의 현재 체중도 같이 갱신 (가장 최근 기록 기준) */
+    const latest=state.weights.slice().sort((a,b)=>a.log_date.localeCompare(b.log_date)).pop();
+    if(latest&&state.profile){state.profile.weight=latest.weight;}
+    toast('체중을 기록했어요');
+    renderWeightCard();
+  }catch(e){console.error(e);toast('기록에 실패했어요');}
+}
+
 async function saveProfile(){
   if(!state.user)return;
   const btn=document.getElementById('pfSave');
@@ -1415,6 +1582,8 @@ async function saveProfile(){
     sex:pick('pfSex','sex')||null,
     experience:pick('pfExp','exp'),
     goal:allGoals.length?allGoals.join(','):null,
+    target_weight:(()=>{const el=document.getElementById('pfTargetW');if(!el||!allGoals.includes('체중감량'))return null;const n=parseFloat(el.value);return isNaN(n)?null:n;})(),
+    target_date:(()=>{const el=document.getElementById('pfTargetD');return(el&&allGoals.includes('체중감량')&&el.value)?el.value:null;})(),
     note:document.getElementById('pfNote').value.trim()||null,
     updated_at:new Date().toISOString()
   };
@@ -1541,6 +1710,23 @@ function buildSummary(){
       <div class="sc-sub">${upcoming.race_date.slice(5).replace('-','/')}</div></div>`;
   }
 
+  /* 5) 체중 목표 카드 */
+  let weightCard='';
+  const tw=state.profile&&state.profile.target_weight;
+  const wsAll=(state.weights||[]).slice().sort((a,b)=>a.log_date.localeCompare(b.log_date));
+  if(tw!=null&&wsAll.length){
+    const startW=wsAll[0].weight, curW=wsAll[wsAll.length-1].weight;
+    const total=startW-tw, done=startW-curW;
+    let pct=total!==0?Math.round((done/total)*100):100;
+    pct=Math.max(0,Math.min(100,pct));
+    const remain=(curW-tw);
+    const rtxt=Math.abs(remain)<0.05?'달성!':`${Math.abs(remain).toFixed(1)}kg ${remain>0?'남음':'초과'}`;
+    weightCard=`<div class="sum-card">
+      <div class="sc-label">목표 체중</div>
+      <div class="sc-main">${pct}%</div>
+      <div class="sc-sub ${remain<=0?'up':''}">${rtxt}</div></div>`;
+  }
+
   return `<div class="sum-grid">
     <div class="sum-card">
       <div class="sc-label">이번 주 운동</div>
@@ -1553,6 +1739,7 @@ function buildSummary(){
       <div class="sc-sub ${perfCls}">${perfSub}</div>
     </div>
     ${kcalCard}
+    ${weightCard}
     ${raceCard}
   </div>`;
 }
@@ -1744,6 +1931,7 @@ document.getElementById('replyPhotoIn').onchange=function(){
   await loadProfile();
   await loadWorkouts();
   await loadRaces();
+  await loadWeights();
   state.admin=lget('ost_admin')==='1';
   try{const lk=lget('ost_liked');if(lk)state.liked=new Set(JSON.parse(lk));}catch(e){}
   try{const rp=lget('ost_reported');if(rp)state.reported=new Set(JSON.parse(rp));}catch(e){}
@@ -1757,6 +1945,7 @@ document.getElementById('replyPhotoIn').onchange=function(){
     await loadProfile();
     await loadWorkouts();
     await loadRaces();
+    await loadWeights();
     paintNick();
     if(state.view==='detail')renderDetail();else renderFeed();
     if(document.getElementById('tab-status').classList.contains('on'))renderStatus();
