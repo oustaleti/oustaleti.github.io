@@ -1213,6 +1213,7 @@ async function googleLogin(){
   });
   if(error){console.error(error);toast('로그인을 시작하지 못했어요');}
 }
+window.googleLogin=googleLogin;
 async function logout(){
   await db.auth.signOut();
   state.user=null;state.nick='';
@@ -1424,6 +1425,7 @@ document.querySelectorAll('.sub-tab').forEach(b=>{
 });
 /* 로고 클릭 → 홈(비서 탭) */
 function goHome(){ if(state.view==='detail')closeDetail(); switchTab('assistant'); }
+window.goHome=goHome;
 
 /* 내 상태 — 서브탭 (대시보드 / 프로필) */
 function switchSub(sub){
