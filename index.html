@@ -412,6 +412,20 @@
     100%{box-shadow:0 0 0 0 rgba(192,57,43,0);}}
   .voice-hint{margin-top:18px;font-size:14px;font-weight:700;color:var(--muted);
     text-align:center;min-height:20px;max-width:90%;line-height:1.5;}
+
+  /* ===== 운동 기록 확인 카드 ===== */
+  .log-confirm{align-self:flex-start;max-width:85%;background:#fff;
+    border:1.5px solid var(--blue);border-radius:14px;padding:13px 15px;margin-top:-2px;}
+  .lc-label{font-size:14.5px;font-weight:800;color:var(--ink);}
+  .lc-q{font-size:12.5px;color:var(--muted);margin-top:3px;}
+  .lc-btns{display:flex;gap:8px;margin-top:11px;}
+  .lc-yes{flex:1;background:var(--blue);color:#fff;border-radius:10px;
+    padding:9px;font-size:13.5px;font-weight:800;transition:.13s;}
+  .lc-yes:hover{filter:brightness(.94);}
+  .lc-no{flex:1;background:#F0F0EE;color:var(--muted);border-radius:10px;
+    padding:9px;font-size:13.5px;font-weight:800;transition:.13s;}
+  .lc-no:hover{background:#E4E4E1;}
+  .lc-done{font-size:13px;font-weight:800;color:var(--blue);text-align:center;padding:3px 0;}
   .clamp{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;}
   .card-actions{display:flex;gap:18px;align-items:center;
     border-top:1px dashed var(--line);padding-top:10px;}
@@ -2037,6 +2051,11 @@ function buildAIContext(){
   lines.push("운동생리학·영양학의 일반적으로 받아들여지는 원리에 근거해 조언하되, 확실하지 않으면 단정하지 마세요.");
   lines.push("답변은 너무 길지 않게, 핵심 위주로. 따뜻하지만 정확하게.");
   lines.push("의학적 진단·처방은 하지 말고, 통증·부상·건강 이상 신호가 있으면 전문가(의사·트레이너) 상담을 권하세요.");
+  lines.push("---운동 기록 감지 규칙---");
+  lines.push("사용자가 '방금/오늘 한 운동'을 말하면(예: '벤치 80kg 10개 5세트 했어', '오늘 5km 뛰었어'), 자연스럽게 답한 뒤 답변 맨 끝에 아래 형식의 기록 태그를 한 줄로 정확히 붙이세요. 운동을 한 게 아니거나(질문·잡담·계획) 정보가 불충분하면 태그를 붙이지 마세요.");
+  lines.push("무산소 형식: [[LOG|무산소|종목|무게|횟수|세트]] 예) [[LOG|무산소|벤치프레스|80|10|5]]");
+  lines.push("유산소 형식: [[LOG|유산소|종목|거리|시간분]] 예) [[LOG|유산소|러닝|5|30]]");
+  lines.push("값을 모르면 빈칸으로 두세요. 예) [[LOG|유산소|사이클||30]] (거리 모름). 태그는 사용자에게 설명하지 말고 그냥 끝에 붙이기만 하세요.");
   lines.push("---아래는 사용자 정보입니다---");
   if(p.nickname)lines.push(`닉네임: ${p.nickname}`);
   const bits=[];
@@ -2072,6 +2091,58 @@ function buildAIContext(){
   return lines.join("\n");
 }
 
+/* AI 답변에서 [[LOG|...]] 추출 → {표시텍스트, row} 반환, 그리고 표시용 텍스트는 제거 */
+function extractWorkoutLog(reply){
+  const m=reply.match(/\[\[LOG\|([^\]]*)\]\]/);
+  if(!m)return {clean:reply,log:null};
+  const clean=reply.replace(/\[\[LOG\|[^\]]*\]\]/,'').trim();
+  const parts=m[1].split('|').map(s=>s.trim());
+  const type=parts[0];
+  const numOr=v=>{const n=parseFloat(v);return isNaN(n)?null:n;};
+  let log=null, label='';
+  if(type==='무산소'){
+    log={type:'무산소',exercise:parts[1]||'운동',weight:numOr(parts[2]),reps:numOr(parts[3]),sets:numOr(parts[4]),distance:null,duration:null};
+    label=`💪 ${log.exercise} ${log.weight?log.weight+'kg ':''}${log.reps?log.reps+'회 ':''}${log.sets?log.sets+'세트':''}`.trim();
+  }else if(type==='유산소'){
+    log={type:'유산소',exercise:parts[1]||'운동',weight:null,reps:null,sets:null,distance:numOr(parts[2]),duration:numOr(parts[3])};
+    label=`🏃 ${log.exercise} ${log.distance?log.distance+'km ':''}${log.duration?log.duration+'분':''}`.trim();
+  }
+  if(log)log.label=label;
+  return {clean,log};
+}
+/* 운동 감지 시 "기록할까요?" 확인 카드 HTML */
+function logConfirmCard(log,where,idx){
+  if(!log)return '';
+  return `<div class="log-confirm" data-where="${where}" data-idx="${idx}">
+    <div class="lc-label">${esc(log.label||'운동')}</div>
+    <div class="lc-q">이 운동을 기록할까요?</div>
+    <div class="lc-btns">
+      <button class="lc-yes">기록</button>
+      <button class="lc-no">취소</button>
+    </div>
+  </div>`;
+}
+/* 확인 카드 버튼 연결 (음성/글자 공통) */
+function wireLogCards(){
+  document.querySelectorAll('.log-confirm').forEach(card=>{
+    const where=card.dataset.where, idx=parseInt(card.dataset.idx,10);
+    const arr=(where==='voice')?state.voiceChat:state.chat;
+    const msg=arr[idx];
+    if(!msg||!msg.pendingLog){card.style.display='none';return;}
+    card.querySelector('.lc-yes').onclick=async()=>{
+      const ok=await saveDetectedWorkout(msg.pendingLog);
+      if(ok){
+        msg.pendingLog=null;
+        card.innerHTML='<div class="lc-done">✓ 기록 완료</div>';
+      }
+    };
+    card.querySelector('.lc-no').onclick=()=>{
+      msg.pendingLog=null;
+      card.innerHTML='<div class="lc-done">기록하지 않음</div>';
+    };
+  });
+}
+
 /* ===== 음성 비서 ===== */
 function speechSupported(){
   return !!(window.SpeechRecognition||window.webkitSpeechRecognition);
@@ -2101,9 +2172,13 @@ function renderVoice(){
       </div>`;
     return;
   }
-  const msgs=state.voiceChat.map(m=>
-    `<div class="ai-msg ${m.role}">${m.role==='assistant'?'🤖 ':''}${esc(m.content).replace(/\n/g,'<br>')}</div>`
-  ).join('');
+  const msgs=state.voiceChat.map((m,i)=>{
+    let html=`<div class="ai-msg ${m.role}">${m.role==='assistant'?'🤖 ':''}${esc(m.content).replace(/\n/g,'<br>')}</div>`;
+    if(m.pendingLog){
+      html+=logConfirmCard(m.pendingLog,'voice',i);
+    }
+    return html;
+  }).join('');
   wrap.innerHTML=`
     <div class="voice-screen">
       <div class="voice-msgs" id="voiceMsgs">${msgs||`
@@ -2128,6 +2203,7 @@ function renderVoice(){
   const box=document.getElementById('voiceMsgs');
   if(box)box.scrollTop=box.scrollHeight;
   document.getElementById('micBtn').onclick=toggleListen;
+  wireLogCards();
   const vc=document.getElementById('voiceClear');
   if(vc)vc.onclick=()=>{stopVoice();state.voiceChat=[];renderVoice();};
 }
@@ -2192,11 +2268,12 @@ async function voiceAsk(text){
       })
     });
     const data=await res.json();
-    const reply=data.reply||'죄송해요, 답변을 받지 못했어요.';
-    state.voiceChat.push({role:'assistant',content:reply});
+    const raw=data.reply||'죄송해요, 답변을 받지 못했어요.';
+    const {clean,log}=extractWorkoutLog(raw);
+    state.voiceChat.push({role:'assistant',content:clean,pendingLog:log});
     renderVoice();
     setMicState('');setVoiceHint('마이크를 누르고 말하세요');
-    speak(reply);
+    speak(clean);
   }catch(e){
     console.error(e);
     state.voiceChat.push({role:'assistant',content:'연결에 문제가 생겼어요. 잠시 후 다시 시도해주세요.'});
@@ -2267,8 +2344,9 @@ async function sendToAI(){
       })
     });
     const data=await res.json();
-    const reply=data.reply||'죄송해요, 답변을 받지 못했어요. 잠시 후 다시 시도해주세요.';
-    state.chat.push({role:'assistant',content:reply});
+    const raw=data.reply||'죄송해요, 답변을 받지 못했어요. 잠시 후 다시 시도해주세요.';
+    const {clean,log}=extractWorkoutLog(raw);
+    state.chat.push({role:'assistant',content:clean,pendingLog:log});
   }catch(e){
     console.error(e);
     state.chat.push({role:'assistant',content:'연결에 문제가 생겼어요. 잠시 후 다시 시도해주세요.'});
@@ -2282,11 +2360,14 @@ function rerenderChat(scroll){
   const panel=document.querySelector('.ai-panel');
   if(!panel)return;
   const msgsBox=document.getElementById('aiMsgs');
-  let html=state.chat.map(m=>
-    `<div class="ai-msg ${m.role}">${m.role==='assistant'?'🤖 ':''}${esc(m.content).replace(/\n/g,'<br>')}</div>`
-  ).join('');
+  let html=state.chat.map((m,i)=>{
+    let h=`<div class="ai-msg ${m.role}">${m.role==='assistant'?'🤖 ':''}${esc(m.content).replace(/\n/g,'<br>')}</div>`;
+    if(m.pendingLog)h+=logConfirmCard(m.pendingLog,'text',i);
+    return h;
+  }).join('');
   if(state.aiBusy)html+=`<div class="ai-msg assistant ai-typing">🤖 <span></span><span></span><span></span></div>`;
   msgsBox.innerHTML=html;
+  wireLogCards();
   /* 대화 비우기 버튼 토글 */
   const head=panel.querySelector('.ai-head');
   if(state.chat.length&&!document.getElementById('aiClear')){
@@ -2579,6 +2660,27 @@ function renderWorkoutList(){
     b.onclick=()=>delWorkout(b.dataset.del);
   });
 }
+/* AI가 감지한 운동을 저장 (확인 버튼에서 호출) */
+async function saveDetectedWorkout(log){
+  if(!state.user||!log)return false;
+  const row={
+    user_id:state.user.id,
+    workout_date:todayStr(),
+    type:log.type,
+    exercise:log.exercise||'운동',
+    weight:log.weight??null, reps:log.reps??null, sets:log.sets??null,
+    distance:log.distance??null, duration:log.duration??null,
+    memo:'🎙️ 비서로 기록'
+  };
+  try{
+    const {data,error}=await db.from('workouts').insert(row).select();
+    if(error)throw error;
+    if(data&&data[0])state.workouts.unshift(data[0]);
+    toast('운동 기록에 저장했어요');
+    return true;
+  }catch(e){console.error(e);toast('저장에 실패했어요');return false;}
+}
+
 async function addWorkout(){
   if(!state.user)return;
   const btn=document.getElementById('wkAdd');
