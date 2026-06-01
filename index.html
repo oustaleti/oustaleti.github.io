@@ -149,8 +149,8 @@
   /* ===== 하단 탭 네비게이션 (커뮤니티/비서/내 상태) ===== */
   .shell{padding-bottom:72px;} /* 하단 탭바 공간 */
   .page{display:none;}
-  .page.on{display:block;animation:pageIn .22s ease;}
-  @keyframes pageIn{from{opacity:.4;transform:translateX(var(--page-dir,0))}to{opacity:1;transform:translateX(0)}}
+  .page.on{display:block;animation:pageIn .2s ease;}
+  @keyframes pageIn{from{opacity:.35}to{opacity:1}}
   .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);
     width:100%;max-width:680px;z-index:50;background:var(--paper);
     border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(3,1fr);
@@ -1410,7 +1410,7 @@ function switchTab(tab){
   window.scrollTo(0,0);
 }
 document.querySelectorAll('.nav-item').forEach(n=>{
-  n.onclick=()=>{document.documentElement.style.setProperty('--page-dir','0px');switchTab(n.dataset.tab);};
+  n.onclick=()=>switchTab(n.dataset.tab);
 });
 document.querySelectorAll('.sub-tab').forEach(b=>{
   b.onclick=()=>switchSub(b.dataset.sub);
@@ -3061,8 +3061,6 @@ function swipeTab(dir){
   const idx=TAB_ORDER.indexOf(cur);
   const next=idx+dir;
   if(next<0||next>=TAB_ORDER.length)return; /* 양 끝에서는 무시 */
-  /* 슬라이드 방향: 다음 탭이면 오른쪽에서, 이전 탭이면 왼쪽에서 */
-  document.documentElement.style.setProperty('--page-dir',dir>0?'24px':'-24px');
   switchTab(TAB_ORDER[next]);
 }
 (function(){
