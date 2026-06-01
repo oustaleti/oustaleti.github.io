@@ -1764,38 +1764,44 @@ function renderInbodyCard(){
   let nowHtml='';
   if(latest){
     const first=arr[0];
-    const fatD=(arr.length>=2&&first.body_fat!=null&&latest.body_fat!=null)?(latest.body_fat-first.body_fat):null;
-    const musD=(arr.length>=2&&first.muscle_mass!=null&&latest.muscle_mass!=null)?(latest.muscle_mass-first.muscle_mass):null;
+    const diff=(k)=>(arr.length>=2&&first[k]!=null&&latest[k]!=null)?(latest[k]-first[k]):null;
     const dtag=(v,goodWhenDown)=>{
       if(v==null||Math.abs(v)<0.05)return '';
       const down=v<0;
       const good=goodWhenDown?down:!down;
       return `<span class="ib-d ${good?'good':'bad'}">${down?'▼':'▲'}${Math.abs(v).toFixed(1)}</span>`;
     };
-    nowHtml=`<div class="ib-now">
-      <div class="ib-stat">
-        <div class="ib-lab">체지방률</div>
-        <div class="ib-val">${latest.body_fat!=null?latest.body_fat+'%':'-'} ${dtag(fatD,true)}</div>
-      </div>
-      <div class="ib-stat">
-        <div class="ib-lab">골격근량</div>
-        <div class="ib-val">${latest.muscle_mass!=null?latest.muscle_mass+'kg':'-'} ${dtag(musD,false)}</div>
-      </div>
-    </div>`;
+    const stat=(lab,k,unit,goodWhenDown)=>
+      latest[k]==null?'':`<div class="ib-stat">
+        <div class="ib-lab">${lab}</div>
+        <div class="ib-val">${latest[k]}${unit} ${dtag(diff(k),goodWhenDown)}</div></div>`;
+    const cards=[
+      stat('체중','weight','kg',true),
+      stat('골격근량','muscle_mass','kg',false),
+      stat('체지방량','fat_mass','kg',true),
+      stat('체지방률','body_fat','%',true),
+      stat('BMI','bmi','',true)
+    ].filter(Boolean).join('');
+    nowHtml=cards?`<div class="ib-now">${cards}</div>`:'';
   }else{
-    nowHtml=`<div class="wt-hint">인바디 측정 결과(체지방률·골격근량)를 입력하면,
-      변화 추이를 추적하고 등급도 더 정확해져요.</div>`;
+    nowHtml=`<div class="wt-hint">인바디 측정 결과를 입력하면, 변화 추이를 추적하고 등급도 더 정확해져요.
+      사진으로 한 번에 자동 입력할 수도 있어요.</div>`;
   }
 
   /* 최근 추이 */
   let recent='';
   if(arr.length){
     const last5=arr.slice(-5).reverse();
+    const sumLine=r=>[
+      r.body_fat!=null?r.body_fat+'%':null,
+      r.muscle_mass!=null?r.muscle_mass+'kg':null,
+      r.weight!=null?r.weight+'kg':null
+    ].filter(Boolean).join(' · ')||'-';
     recent=`<div class="wt-recent-head">기록 이력</div>
       <div class="wt-recent">`+last5.map(r=>`
         <div class="wt-rec-item">
           <span class="wt-rec-date">${r.log_date.slice(5).replace('-','/')}</span>
-          <span class="wt-rec-w">${r.body_fat!=null?r.body_fat+'%':'-'} · ${r.muscle_mass!=null?r.muscle_mass+'kg':'-'}
+          <span class="wt-rec-w">${sumLine(r)}
             <button class="ib-del" data-ib="${r.id}">&times;</button></span>
         </div>`).join('')+`</div>`;
   }
@@ -1812,10 +1818,21 @@ function renderInbodyCard(){
     <div class="ib-photo-status" id="ibPhotoStatus"></div>
     <div class="ib-input">
       <div class="pf-row">
-        <div class="pf-field"><label>체지방률 (%)</label>
-          <input id="ibFat" type="number" min="1" max="60" step="0.1" placeholder="예: 18.5"></div>
+        <div class="pf-field"><label>체중 (kg)</label>
+          <input id="ibWeight" type="number" min="20" max="250" step="0.1" placeholder="예: 70"></div>
         <div class="pf-field"><label>골격근량 (kg)</label>
           <input id="ibMus" type="number" min="10" max="80" step="0.1" placeholder="예: 35"></div>
+      </div>
+      <div class="pf-row">
+        <div class="pf-field"><label>체지방량 (kg)</label>
+          <input id="ibFatMass" type="number" min="1" max="120" step="0.1" placeholder="예: 13"></div>
+        <div class="pf-field"><label>체지방률 (%)</label>
+          <input id="ibFat" type="number" min="1" max="60" step="0.1" placeholder="예: 18.5"></div>
+      </div>
+      <div class="pf-row">
+        <div class="pf-field"><label>BMI</label>
+          <input id="ibBmi" type="number" min="10" max="50" step="0.1" placeholder="예: 22.5"></div>
+        <div class="pf-field"></div>
       </div>
       <div class="wt-input-row" style="margin-top:4px">
         <input id="ibDate" type="date" value="${todayStr()}">
@@ -1845,8 +1862,9 @@ async function handleInbodyPhoto(e){
     const {b64,mime}=await shrinkImage(file,1000);
     const sys="당신은 인바디(체성분 분석) 결과지를 읽는 도우미입니다. "+
       "사진에서 다음 값을 찾아 JSON만 출력하세요(설명·마크다운 금지): "+
-      "{\"body_fat\":체지방률숫자, \"muscle_mass\":골격근량숫자, \"weight\":체중숫자}. "+
+      "{\"weight\":체중kg, \"muscle_mass\":골격근량kg, \"fat_mass\":체지방량kg, \"body_fat\":체지방률퍼센트, \"bmi\":BMI}. "+
       "골격근량은 'SMM' 또는 '골격근량' 값을 쓰세요(근육량/제지방량과 혼동 주의). "+
+      "체지방량은 '체지방량'(kg) 값, 체지방률은 'PBF' 또는 '체지방률'(%) 값입니다. "+
       "값을 못 찾으면 그 항목은 null. 숫자만, 단위 빼고.";
     const res=await fetch(`${SUPABASE_URL}/functions/v1/chat`,{
       method:'POST',
@@ -1854,7 +1872,7 @@ async function handleInbodyPhoto(e){
         'Authorization':`Bearer ${SUPABASE_KEY}`,'apikey':SUPABASE_KEY},
       body:JSON.stringify({
         system:sys,
-        messages:[{role:'user',content:'이 인바디 사진에서 체지방률, 골격근량, 체중을 읽어줘.'}],
+        messages:[{role:'user',content:'이 인바디 사진에서 체중, 골격근량, 체지방량, 체지방률, BMI를 읽어줘.'}],
         image:b64, imageMime:mime
       })
     });
@@ -1865,9 +1883,12 @@ async function handleInbodyPhoto(e){
     if(!parsed){setS('사진에서 숫자를 읽지 못했어요. 더 선명한 사진으로 다시 시도하거나, 직접 입력해주세요.','err');return;}
     /* 입력칸 자동 채움 */
     let filled=[];
-    if(parsed.body_fat!=null){document.getElementById('ibFat').value=parsed.body_fat;filled.push(`체지방률 ${parsed.body_fat}%`);}
-    if(parsed.muscle_mass!=null){document.getElementById('ibMus').value=parsed.muscle_mass;filled.push(`골격근량 ${parsed.muscle_mass}kg`);}
-    if(parsed.weight!=null&&state.profile){/* 체중은 참고만 — 표시 */filled.push(`체중 ${parsed.weight}kg`);}
+    const fill=(id,val,fmt)=>{if(val!=null){const el=document.getElementById(id);if(el)el.value=val;filled.push(fmt);}};
+    fill('ibWeight',parsed.weight,`체중 ${parsed.weight}kg`);
+    fill('ibMus',parsed.muscle_mass,`골격근량 ${parsed.muscle_mass}kg`);
+    fill('ibFatMass',parsed.fat_mass,`체지방량 ${parsed.fat_mass}kg`);
+    fill('ibFat',parsed.body_fat,`체지방률 ${parsed.body_fat}%`);
+    fill('ibBmi',parsed.bmi,`BMI ${parsed.bmi}`);
     if(filled.length){
       setS(`✓ 읽었어요: ${filled.join(', ')} — 확인 후 '기록 추가'를 눌러주세요`,'ok');
     }else{
@@ -1903,9 +1924,13 @@ function shrinkImage(file,maxSide){
 async function addInbody(){
   if(!state.user)return;
   const dt=document.getElementById('ibDate').value||todayStr();
-  const fat=parseFloat(document.getElementById('ibFat').value);
-  const mus=parseFloat(document.getElementById('ibMus').value);
-  if(isNaN(fat)&&isNaN(mus)){toast('체지방률이나 골격근량을 입력해주세요');return;}
+  const num=id=>{const el=document.getElementById(id);if(!el)return null;
+    const n=parseFloat(el.value);return isNaN(n)?null:n;};
+  const weight=num('ibWeight'), mus=num('ibMus'), fatMass=num('ibFatMass'),
+        fat=num('ibFat'), bmi=num('ibBmi');
+  if(weight==null&&mus==null&&fatMass==null&&fat==null&&bmi==null){
+    toast('값을 하나 이상 입력해주세요');return;
+  }
   try{
     const existing=state.inbody.find(x=>x.log_date===dt);
     if(existing){
@@ -1913,11 +1938,13 @@ async function addInbody(){
       state.inbody=state.inbody.filter(x=>x.id!==existing.id);
     }
     const row={user_id:state.user.id,log_date:dt,
-      body_fat:isNaN(fat)?null:fat, muscle_mass:isNaN(mus)?null:mus,
-      weight:(state.profile&&state.profile.weight)||null};
+      body_fat:fat, muscle_mass:mus, fat_mass:fatMass, bmi:bmi,
+      weight:(weight!=null?weight:((state.profile&&state.profile.weight)||null))};
     const {data,error}=await db.from('inbody').insert(row).select();
     if(error)throw error;
     if(data&&data[0])state.inbody.push(data[0]);
+    /* 인바디 체중을 프로필 현재 체중에도 반영 */
+    if(weight!=null&&state.profile)state.profile.weight=weight;
     toast('인바디를 기록했어요');
     renderInbodyCard();
   }catch(e){console.error(e);toast('기록에 실패했어요');}
