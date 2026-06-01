@@ -3121,6 +3121,9 @@ function swipeTab(dir){
   let sx=0,sy=0,tracking=false,fromEdge=false;
   document.addEventListener('touchstart',e=>{
     if(e.touches.length!==1){tracking=false;return;}
+    /* 입력창·버튼 등에서 시작하면 스와이프 추적 안 함 (화면 튐 방지) */
+    const tag=(e.target&&e.target.tagName)||'';
+    if(/INPUT|TEXTAREA|SELECT|BUTTON/.test(tag)){tracking=false;return;}
     const t=e.touches[0];
     sx=t.clientX;sy=t.clientY;tracking=true;
     fromEdge=(sx<=30); /* 왼쪽 가장자리에서 시작했나 */
