@@ -153,6 +153,46 @@
   .placeholder-page .pp-soon{display:inline-block;margin-top:16px;font-size:11px;
     font-weight:800;letter-spacing:.05em;color:var(--blue);
     border:1.4px solid var(--blue);border-radius:999px;padding:5px 13px;}
+
+  /* ===== 내 상태 — 프로필 입력 ===== */
+  .status-wrap{padding:22px 18px 30px;}
+  .st-head{margin-bottom:20px;}
+  .st-head h2{font-family:'Bricolage Grotesque';font-weight:800;font-size:24px;
+    letter-spacing:-.02em;}
+  .st-head p{font-size:13.5px;color:var(--muted);margin-top:4px;}
+  .pf-card{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:20px 18px;box-shadow:var(--shadow);}
+  .pf-sec-title{font-size:12px;font-weight:800;color:var(--blue);
+    letter-spacing:.04em;margin:4px 0 14px;}
+  .pf-row{display:flex;gap:12px;margin-bottom:14px;}
+  .pf-field{flex:1;display:flex;flex-direction:column;gap:6px;}
+  .pf-field label{font-size:12.5px;font-weight:700;color:var(--muted);}
+  .pf-field input,.pf-field select,.pf-field textarea{
+    width:100%;border:1.5px solid var(--line);border-radius:10px;
+    padding:11px 12px;font-size:14.5px;font-family:inherit;color:var(--ink);
+    background:#fff;transition:.12s;}
+  .pf-field input:focus,.pf-field select:focus,.pf-field textarea:focus{
+    outline:none;border-color:var(--blue);}
+  .pf-field textarea{resize:none;line-height:1.5;}
+  .pf-chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .pf-chip{border:1.5px solid var(--line);border-radius:999px;padding:9px 15px;
+    font-size:13.5px;font-weight:700;color:var(--muted);background:#fff;
+    cursor:pointer;transition:.12s;}
+  .pf-chip.on{border-color:var(--blue);background:var(--blue);color:#fff;}
+  .pf-save{width:100%;margin-top:6px;background:var(--ink);color:#fff;
+    border-radius:12px;padding:15px;font-size:15px;font-weight:800;
+    transition:.13s;}
+  .pf-save:hover{background:var(--blue);}
+  .pf-save:disabled{opacity:.5;cursor:default;}
+  .pf-saved-note{text-align:center;font-size:12.5px;color:var(--muted);margin-top:12px;}
+  .pf-locked{text-align:center;padding:50px 28px;color:var(--muted);}
+  .pf-locked .lk-emoji{font-size:42px;margin-bottom:14px;}
+  .pf-locked .lk-title{font-family:'Bricolage Grotesque';font-weight:800;
+    font-size:20px;color:var(--ink);margin-bottom:8px;}
+  .pf-locked .lk-desc{font-size:13.5px;line-height:1.6;max-width:300px;margin:0 auto 18px;}
+  .pf-locked .lk-btn{display:inline-flex;align-items:center;gap:8px;
+    background:var(--ink);color:#fff;border-radius:999px;padding:12px 22px;
+    font-size:14px;font-weight:700;}
   .clamp{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;}
   .card-actions{display:flex;gap:18px;align-items:center;
     border-top:1px dashed var(--line);padding-top:10px;}
@@ -363,14 +403,7 @@
 
   <!-- ===== 내 상태 탭 (틀만 — 그래프는 D단계) ===== -->
   <div class="page" id="tab-status">
-    <div class="placeholder-page">
-      <div class="pp-emoji">📊</div>
-      <div class="pp-title">내 상태</div>
-      <p class="pp-desc">운동량, 소모 칼로리, 근성장·체중 변화,<br>
-        목표까지의 운동 계획을 한눈에.<br>
-        복잡한 앱은 그만 — 깔끔하게 핵심만.</p>
-      <span class="pp-soon">COMING SOON</span>
-    </div>
+    <div class="status-wrap" id="statusWrap"></div>
   </div>
 </div><!-- /shell -->
 
@@ -433,7 +466,7 @@ const catOf=id=>CATS.find(c=>c.id===id)||CATS[5];
 
 let state={cat:'all',sort:'recent',threads:[],nick:'',liked:new Set(),
   view:'feed',thread:null,composeCat:'road',admin:false,user:null,
-  reported:new Set(),reports:[]};
+  reported:new Set(),reports:[],profile:null};
 
 /* ---------- 닉네임/좋아요 = 이 브라우저에만 저장 ---------- */
 function lget(k){try{return localStorage.getItem(k);}catch(e){return null;}}
@@ -1074,11 +1107,165 @@ function switchTab(tab){
   if(isCommunity)paintReportFab(); else document.getElementById('fabReport').style.display='none';
   /* 커뮤니티로 올 땐 상세화면이 아닌 피드부터 */
   if(isCommunity&&state.view==='detail')closeDetail();
+  /* 내 상태 탭이면 프로필 화면 그리기 */
+  if(tab==='status')renderStatus();
   window.scrollTo(0,0);
 }
 document.querySelectorAll('.nav-item').forEach(n=>{
   n.onclick=()=>switchTab(n.dataset.tab);
 });
+
+/* ---------- 내 상태 — 프로필 ---------- */
+const GOALS=[
+  {v:'근비대',label:'근비대'},
+  {v:'체중감량',label:'체중감량'},
+  {v:'근력향상',label:'근력향상'},
+  {v:'체력유지',label:'체력유지'},
+  {v:'대회준비',label:'대회 준비'}
+];
+const EXPS=[
+  {v:'입문',label:'입문 (1년 미만)'},
+  {v:'중급',label:'중급 (1~3년)'},
+  {v:'상급',label:'상급 (3년+)'}
+];
+
+async function loadProfile(){
+  if(!state.user)return;
+  try{
+    const {data}=await db.from('profiles').select('*').eq('user_id',state.user.id).maybeSingle();
+    state.profile=data||null;
+  }catch(e){state.profile=null;}
+}
+
+function renderStatus(){
+  const wrap=document.getElementById('statusWrap');
+  /* 로그인 안 됐으면 안내 */
+  if(!state.user){
+    wrap.innerHTML=`
+      <div class="pf-locked">
+        <div class="lk-emoji">🔒</div>
+        <div class="lk-title">로그인이 필요해요</div>
+        <p class="lk-desc">내 프로필과 운동 기록은 나만 볼 수 있게
+          안전하게 보관됩니다. 먼저 로그인해 주세요.</p>
+        <button class="lk-btn" onclick="googleLogin()">구글로 로그인</button>
+      </div>`;
+    return;
+  }
+  const p=state.profile||{};
+  const goalChips=GOALS.map(g=>
+    `<button type="button" class="pf-chip ${p.goal===g.v?'on':''}" data-goal="${g.v}">${g.label}</button>`
+  ).join('');
+  const expChips=EXPS.map(e=>
+    `<button type="button" class="pf-chip ${p.experience===e.v?'on':''}" data-exp="${e.v}">${e.label}</button>`
+  ).join('');
+  const sexChips=[['남','남성'],['여','여성'],['','선택안함']].map(([v,l])=>
+    `<button type="button" class="pf-chip ${(p.sex||'')===v?'on':''}" data-sex="${v}">${l}</button>`
+  ).join('');
+
+  wrap.innerHTML=`
+    <div class="st-head">
+      <h2>내 프로필</h2>
+      <p>비서가 당신에게 맞는 코칭을 하려면 먼저 알아야 해요.</p>
+    </div>
+    <div class="pf-card">
+      <div class="pf-sec-title">기본 정보</div>
+      <div class="pf-row">
+        <div class="pf-field">
+          <label>닉네임</label>
+          <input id="pfNick" type="text" maxlength="20" placeholder="라이더" value="${esc(p.nickname||state.nick||'')}">
+        </div>
+        <div class="pf-field">
+          <label>나이</label>
+          <input id="pfAge" type="number" min="10" max="100" placeholder="예: 32" value="${p.age??''}">
+        </div>
+      </div>
+      <div class="pf-row">
+        <div class="pf-field">
+          <label>키 (cm)</label>
+          <input id="pfHeight" type="number" min="100" max="230" placeholder="예: 175" value="${p.height??''}">
+        </div>
+        <div class="pf-field">
+          <label>체중 (kg)</label>
+          <input id="pfWeight" type="number" min="30" max="200" step="0.1" placeholder="예: 70" value="${p.weight??''}">
+        </div>
+      </div>
+      <div class="pf-field" style="margin-bottom:14px">
+        <label>성별</label>
+        <div class="pf-chips" id="pfSex">${sexChips}</div>
+      </div>
+
+      <div class="pf-sec-title" style="margin-top:18px">운동 경력</div>
+      <div class="pf-field" style="margin-bottom:14px">
+        <div class="pf-chips" id="pfExp">${expChips}</div>
+      </div>
+
+      <div class="pf-sec-title" style="margin-top:18px">목표</div>
+      <div class="pf-field" style="margin-bottom:16px">
+        <div class="pf-chips" id="pfGoal">${goalChips}</div>
+      </div>
+
+      <div class="pf-field" style="margin-bottom:18px">
+        <label>비서가 알아야 할 점 (선택)</label>
+        <textarea id="pfNote" rows="3" maxlength="300"
+          placeholder="예: 오른쪽 무릎이 안 좋아요 / 단백질 보충제 먹는 중 / 주 4회 운동">${esc(p.note||'')}</textarea>
+      </div>
+
+      <button class="pf-save" id="pfSave">저장하기</button>
+      <div class="pf-saved-note" id="pfSavedNote">${p.updated_at?'마지막 저장: '+ago(p.updated_at):''}</div>
+    </div>`;
+
+  /* 칩 선택 (단일 선택) */
+  function chipGroup(id,attr){
+    const box=document.getElementById(id);
+    box.querySelectorAll('.pf-chip').forEach(c=>{
+      c.onclick=()=>{
+        box.querySelectorAll('.pf-chip').forEach(x=>x.classList.remove('on'));
+        c.classList.add('on');
+      };
+    });
+  }
+  chipGroup('pfSex','sex');
+  chipGroup('pfExp','exp');
+  chipGroup('pfGoal','goal');
+
+  document.getElementById('pfSave').onclick=saveProfile;
+}
+
+async function saveProfile(){
+  if(!state.user)return;
+  const btn=document.getElementById('pfSave');
+  const pick=(id,attr)=>{
+    const on=document.querySelector(`#${id} .pf-chip.on`);
+    return on?on.dataset[attr]:null;
+  };
+  const num=v=>{const n=parseFloat(v);return isNaN(n)?null:n;};
+  const row={
+    user_id:state.user.id,
+    nickname:document.getElementById('pfNick').value.trim()||null,
+    age:(()=>{const n=parseInt(document.getElementById('pfAge').value,10);return isNaN(n)?null:n;})(),
+    height:num(document.getElementById('pfHeight').value),
+    weight:num(document.getElementById('pfWeight').value),
+    sex:pick('pfSex','sex')||null,
+    experience:pick('pfExp','exp'),
+    goal:pick('pfGoal','goal'),
+    note:document.getElementById('pfNote').value.trim()||null,
+    updated_at:new Date().toISOString()
+  };
+  btn.disabled=true;btn.textContent='저장 중...';
+  try{
+    const {error}=await db.from('profiles').upsert(row,{onConflict:'user_id'});
+    if(error)throw error;
+    state.profile=row;
+    btn.textContent='저장됨 ✓';
+    toast('프로필을 저장했어요');
+    document.getElementById('pfSavedNote').textContent='마지막 저장: 방금';
+    setTimeout(()=>{btn.disabled=false;btn.textContent='저장하기';},1400);
+  }catch(e){
+    console.error(e);
+    btn.disabled=false;btn.textContent='저장하기';
+    toast('저장에 실패했어요. 다시 시도해주세요');
+  }
+}
 
 /* ---------- 라이트박스 (사진 크게 보기) ---------- */
 let lxImages=[], lxIdx=0;
@@ -1124,6 +1311,7 @@ document.getElementById('replyPhotoIn').onchange=function(){
   renderTabs();
   document.getElementById('feed').innerHTML='<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
   await loadUser();
+  await loadProfile();
   state.admin=lget('ost_admin')==='1';
   try{const lk=lget('ost_liked');if(lk)state.liked=new Set(JSON.parse(lk));}catch(e){}
   try{const rp=lget('ost_reported');if(rp)state.reported=new Set(JSON.parse(rp));}catch(e){}
@@ -1134,8 +1322,10 @@ document.getElementById('replyPhotoIn').onchange=function(){
   /* 로그인 상태 변화 감지 (구글 로그인 후 돌아왔을 때) */
   db.auth.onAuthStateChange(async()=>{
     await loadUser();
+    await loadProfile();
     paintNick();
     if(state.view==='detail')renderDetail();else renderFeed();
+    if(document.getElementById('tab-status').classList.contains('on'))renderStatus();
   });
 })();
 </script>
