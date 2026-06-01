@@ -425,9 +425,10 @@
   @keyframes aiblink{0%,60%,100%{opacity:.25;}30%{opacity:1;}}
 
   /* ===== 음성 비서 ===== */
-  .voice-screen{padding:48px 20px 40px;display:flex;flex-direction:column;align-items:center;}
-  /* 대화가 있을 땐 위에서부터 */
-  .voice-screen.has-chat{padding-top:20px;}
+  .voice-screen{padding:20px 20px 40px;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;min-height:calc(100vh - 200px);}
+  /* 대화가 있을 땐 위에서부터 (중앙정렬 해제) */
+  .voice-screen.has-chat{justify-content:flex-start;min-height:0;padding-top:20px;}
   .voice-msgs{width:100%;display:flex;flex-direction:column;gap:9px;}
   .voice-screen.has-chat .voice-msgs{flex:1;overflow-y:auto;max-height:50vh;margin-bottom:20px;}
   .voice-status{min-height:2px;}
