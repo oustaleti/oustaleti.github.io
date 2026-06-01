@@ -567,7 +567,7 @@
           <circle cx="50" cy="50" r="6" fill="#FFFFFF"/>
         </svg>
       </div>
-      <div class="hdr-center">
+      <div class="hdr-center" style="cursor:pointer" onclick="goHome()">
         <svg class="logo-img" viewBox="40 140 290 56" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OUSTALETI">
           <path fill="#fff" d="M99.36,158.95v21.33c0,4.27,2.06,6.4,6.2,6.4s6.2-2.13,6.2-6.4v-22.36l12.19-7.48v32.2c0,4.67-1.54,8.17-4.61,10.51-3.08,2.34-7.67,3.5-13.78,3.5s-10.7-1.17-13.77-3.5c-3.08-2.33-4.62-5.84-4.62-10.51v-16.11l12.19-7.58Z"/>
           <path fill="#fff" d="M153.44,169.7c-2.25-1.16-4.44-1.75-6.6-1.75-1.12,0-2.03.23-2.73.67-.7.45-1.04,1.05-1.04,1.82,0,.4.06.73.17.97.11.25.36.49.74.71.38.23.94.43,1.68.61.74.18,1.72.4,2.93.68,3.37.67,5.88,1.88,7.54,3.6,1.66,1.73,2.49,3.94,2.49,6.63,0,2.02-.41,3.84-1.21,5.46-.81,1.62-1.93,2.98-3.37,4.08-1.44,1.1-3.16,1.95-5.19,2.56-2.02.61-4.24.91-6.67.91-4.67,0-9.27-1.32-13.81-3.97l-.12-11.19c3.41,2.33,11.2,6.07,14.26,6.07,1.12,0,2.04-.25,2.76-.75.72-.49,1.08-1.12,1.08-1.89,0-.45-.06-.82-.17-1.11-.11-.29-.35-.56-.71-.81-.36-.25-.88-.47-1.58-.68-.7-.2-1.6-.41-2.73-.64-3.77-.76-6.41-1.89-7.92-3.4-1.5-1.5-2.26-3.58-2.26-6.23,0-1.93.36-3.67,1.08-5.22.72-1.55,1.75-2.86,3.1-3.94,1.35-1.08,2.97-1.91,4.88-2.49,1.91-.59,4.03-.87,6.37-.87,3.82,0,3.27-.18,7.24.42l-.23,9.74Z"/>
@@ -702,13 +702,13 @@ const ADMIN_PW = "5729";
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const CATS=[
-  {id:'road',name:'로드'},{id:'mtb',name:'MTB'},{id:'com',name:'커뮤터'},
-  {id:'q',name:'입문 Q&A'},{id:'gear',name:'장비·후기'},{id:'lounge',name:'운동 라운지'},
+  {id:'bike',name:'자전거'},{id:'run',name:'러닝'},{id:'hyrox',name:'하이록스'},
+  {id:'gym',name:'헬스'},{id:'gear',name:'장비'},{id:'etc',name:'기타'},
 ];
-const catOf=id=>CATS.find(c=>c.id===id)||CATS[5];
+const catOf=id=>CATS.find(c=>c.id===id)||CATS[CATS.length-1];
 
 let state={cat:'all',sort:'recent',threads:[],nick:'',liked:new Set(),
-  view:'feed',thread:null,composeCat:'road',admin:false,user:null,
+  view:'feed',thread:null,composeCat:'bike',admin:false,user:null,
   reported:new Set(),reports:[],profile:null,workouts:[],wkType:'무산소',races:[],weights:[],inbody:[],chat:[],aiBusy:false,sub:'dash',
   voiceChat:[],recog:null,listening:false,speaking:false};
 
@@ -1215,7 +1215,7 @@ async function loadUser(){
 /* ---------- 새 글 ---------- */
 function openCompose(){
   if(!state.user){openLoginPrompt();return;}
-  state.composeCat=state.cat!=='all'?state.cat:'road';
+  state.composeCat=state.cat!=='all'?state.cat:'bike';
   document.getElementById('modal').innerHTML=`
     <h3>새 토론 열기</h3>
     <p class="sub">토픽을 고르고, 하고 싶은 이야기를 적어주세요.</p>
@@ -1356,6 +1356,7 @@ function switchTab(tab){
   /* 비서 탭이면 음성 화면 그리기 */
   if(tab==='assistant')renderVoice();
   else stopVoice(); /* 다른 탭으로 가면 음성·읽기 중지 */
+  lset('ost_tab',tab); /* 새로고침 시 현재 탭 유지 */
   window.scrollTo(0,0);
 }
 document.querySelectorAll('.nav-item').forEach(n=>{
@@ -1364,6 +1365,8 @@ document.querySelectorAll('.nav-item').forEach(n=>{
 document.querySelectorAll('.sub-tab').forEach(b=>{
   b.onclick=()=>switchSub(b.dataset.sub);
 });
+/* 로고 클릭 → 홈(비서 탭) */
+function goHome(){ if(state.view==='detail')closeDetail(); switchTab('assistant'); }
 
 /* 내 상태 — 서브탭 (대시보드 / 프로필) */
 function switchSub(sub){
@@ -1371,6 +1374,7 @@ function switchSub(sub){
   document.querySelectorAll('.sub-pane').forEach(p=>p.classList.remove('on'));
   document.getElementById('sub-'+sub).classList.add('on');
   state.sub=sub;
+  lset('ost_sub',sub); /* 새로고침 시 유지 */
   renderSubPane();
   window.scrollTo(0,0);
 }
@@ -2990,6 +2994,30 @@ document.getElementById('replyPhotoIn').onchange=function(){
   this.value='';drawReplyPreview();updateReplySend();
 };
 
+/* ---------- 스와이프 뒤로가기 (왼→오른쪽) ---------- */
+(function(){
+  let sx=0,sy=0,tracking=false;
+  document.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1){tracking=false;return;}
+    const t=e.touches[0];
+    sx=t.clientX;sy=t.clientY;
+    /* 화면 왼쪽 가장자리(40px 이내)에서 시작한 스와이프만 뒤로가기로 인식 */
+    tracking=(sx<=40);
+  },{passive:true});
+  document.addEventListener('touchend',e=>{
+    if(!tracking)return;tracking=false;
+    const t=e.changedTouches[0];
+    const dx=t.clientX-sx, dy=t.clientY-sy;
+    /* 오른쪽으로 80px 이상, 세로 흔들림은 적게 */
+    if(dx>80&&Math.abs(dy)<60){ goBack(); }
+  },{passive:true});
+})();
+/* 뒤로가기 동작 — 커뮤니티 상세면 목록으로, 아니면 홈 */
+function goBack(){
+  if(state.view==='detail'){ closeDetail(); return; }
+  if(!document.getElementById('tab-assistant').classList.contains('on')){ switchTab('assistant'); }
+}
+
 /* ---------- 시작 ---------- */
 (async function init(){
   renderTabs();
@@ -3007,8 +3035,10 @@ document.getElementById('replyPhotoIn').onchange=function(){
   if(state.admin)await loadReports();
   await loadThreads();
   renderFeed();
-  /* 첫 화면은 비서 탭 — 커뮤니티 전용 요소(글쓰기·토픽탭·신고함) 숨김 처리 */
-  switchTab('assistant');
+  /* 새로고침 시 마지막 화면 유지 (없으면 비서 탭) */
+  const savedSub=lget('ost_sub'); if(savedSub==='dash'||savedSub==='profile')state.sub=savedSub;
+  const savedTab=lget('ost_tab');
+  switchTab((savedTab==='community'||savedTab==='status'||savedTab==='assistant')?savedTab:'assistant');
   /* 로그인 상태 변화 감지 (구글 로그인 후 돌아왔을 때) */
   db.auth.onAuthStateChange(async()=>{
     await loadUser();
