@@ -223,6 +223,18 @@
     width:30px;height:30px;border-radius:8px;transition:.12s;}
   .wk-item .wk-del:hover{background:#FCE9E6;color:#C0392B;}
   .wk-empty{text-align:center;color:var(--muted);font-size:13.5px;padding:24px 0;}
+
+  /* ===== 요약 카드 (운동 기록 상단) ===== */
+  .sum-grid{display:flex;gap:9px;margin-bottom:20px;}
+  .sum-card{flex:1;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:14px 12px;text-align:center;box-shadow:var(--shadow);}
+  .sum-card .sc-label{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:7px;}
+  .sum-card .sc-main{font-family:'Bricolage Grotesque';font-weight:800;
+    font-size:22px;letter-spacing:-.02em;line-height:1;color:var(--ink);}
+  .sum-card .sc-sub{font-size:11px;font-weight:700;margin-top:6px;color:var(--muted);}
+  .sc-sub.up{color:var(--blue);}
+  .sc-sub.down{color:#C0392B;}
+  .sum-card.race .sc-main{color:var(--blue);}
   .clamp{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;}
   .card-actions{display:flex;gap:18px;align-items:center;
     border-top:1px dashed var(--line);padding-top:10px;}
@@ -1159,6 +1171,10 @@ async function loadProfile(){
   try{
     const {data}=await db.from('profiles').select('*').eq('user_id',state.user.id).maybeSingle();
     state.profile=data||null;
+    /* 프로필에 닉네임이 있으면 커뮤니티 표시 이름으로 우선 사용 */
+    if(data&&data.nickname&&data.nickname.trim()){
+      state.nick=data.nickname.trim();
+    }
   }catch(e){state.profile=null;}
 }
 
@@ -1238,6 +1254,10 @@ function renderStatus(){
         <input id="pfGoalCustom" type="text" maxlength="100"
           placeholder="예: 마라톤 완주, 체지방 15%" value="${esc(customGoals.join(', '))}">
       </div>
+      <div class="pf-field" id="pfRaceWrap" style="margin-bottom:16px;display:${savedGoals.includes('대회준비')?'flex':'none'}">
+        <label>🏁 대회 날짜 (D-day 계산용)</label>
+        <input id="pfRaceDate" type="date" value="${p.race_date||''}">
+      </div>
 
       <div class="pf-field" style="margin-bottom:18px">
         <label>비서가 알아야 할 점 (선택)</label>
@@ -1263,7 +1283,13 @@ function renderStatus(){
   function chipMulti(id){
     const box=document.getElementById(id);
     box.querySelectorAll('.pf-chip').forEach(c=>{
-      c.onclick=()=>c.classList.toggle('on');
+      c.onclick=()=>{
+        c.classList.toggle('on');
+        /* 대회준비 선택 여부에 따라 대회 날짜칸 표시 */
+        if(c.dataset.goal==='대회준비'){
+          document.getElementById('pfRaceWrap').style.display=c.classList.contains('on')?'flex':'none';
+        }
+      };
     });
   }
   chipGroup('pfSex','sex');
@@ -1286,6 +1312,8 @@ async function saveProfile(){
   const goalCustom=document.getElementById('pfGoalCustom').value
     .split(',').map(s=>s.trim()).filter(Boolean);
   const allGoals=[...new Set([...goalPicks,...goalCustom])];
+  const raceEl=document.getElementById('pfRaceDate');
+  const raceDate=(allGoals.includes('대회준비')&&raceEl&&raceEl.value)?raceEl.value:null;
   const row={
     user_id:state.user.id,
     nickname:document.getElementById('pfNick').value.trim()||null,
@@ -1295,6 +1323,7 @@ async function saveProfile(){
     sex:pick('pfSex','sex')||null,
     experience:pick('pfExp','exp'),
     goal:allGoals.length?allGoals.join(','):null,
+    race_date:raceDate,
     note:document.getElementById('pfNote').value.trim()||null,
     updated_at:new Date().toISOString()
   };
@@ -1303,6 +1332,7 @@ async function saveProfile(){
     const {error}=await db.from('profiles').upsert(row,{onConflict:'user_id'});
     if(error)throw error;
     state.profile=row;
+    if(row.nickname&&row.nickname.trim()){state.nick=row.nickname.trim();paintNick();}
     btn.textContent='저장됨 ✓';
     toast('프로필을 저장했어요');
     document.getElementById('pfSavedNote').textContent='마지막 저장: 방금';
@@ -1328,6 +1358,80 @@ async function loadWorkouts(){
     state.workouts=data||[];
   }catch(e){state.workouts=[];}
 }
+/* 요약 카드 — 이번주 운동량 / 수행능력 / 대회 D-day */
+function buildSummary(){
+  const now=new Date();
+  const dayMs=86400000;
+  /* 이번 주(최근7일) vs 지난 주(8~14일 전) */
+  const inRange=(iso,from,to)=>{
+    const t=new Date(iso).getTime();
+    return t>=from&&t<to;
+  };
+  const tNow=now.getTime();
+  const thisFrom=tNow-7*dayMs, lastFrom=tNow-14*dayMs;
+  const ws=state.workouts||[];
+  const thisWk=ws.filter(w=>inRange(w.created_at,thisFrom,tNow));
+  const lastWk=ws.filter(w=>inRange(w.created_at,lastFrom,thisFrom));
+
+  /* 1) 운동량 = 횟수 */
+  const tc=thisWk.length, lc=lastWk.length;
+  let volSub, volCls='';
+  if(lc===0){ volSub = tc>0?'첫 주 기록 중':'기록 없음'; }
+  else{
+    const diff=tc-lc;
+    const pct=Math.round((diff/lc)*100);
+    if(diff>0){volSub=`지난주 ▲ ${pct}%`;volCls='up';}
+    else if(diff<0){volSub=`지난주 ▼ ${Math.abs(pct)}%`;volCls='down';}
+    else{volSub='지난주와 동일';}
+  }
+
+  /* 2) 수행능력 = 무산소 같은종목 최고무게 비교 (가장 최근 vs 그 이전) */
+  let perfMain='—', perfSub='기록이 쌓이는 중', perfCls='';
+  const anByEx={};
+  ws.filter(w=>w.type==='무산소'&&w.weight!=null&&w.exercise)
+    .forEach(w=>{(anByEx[w.exercise.trim()]=anByEx[w.exercise.trim()]||[]).push(w);});
+  for(const ex in anByEx){
+    const arr=anByEx[ex].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    if(arr.length>=2){
+      const recent=arr[0].weight, prev=arr[1].weight;
+      const d=recent-prev;
+      if(d!==0){
+        perfMain=ex;
+        perfSub=(d>0?`+${d}kg ▲`:`${d}kg ▼`);
+        perfCls=(d>0?'up':'down');
+        break;
+      }else{perfMain=ex;perfSub='무게 유지';}
+    }
+  }
+
+  /* 3) 대회 D-day */
+  let raceCard='';
+  const rd=state.profile&&state.profile.race_date;
+  if(rd){
+    const target=new Date(rd+'T00:00:00');
+    const dleft=Math.ceil((target-new Date(now.toDateString()))/dayMs);
+    const dtxt=dleft>0?`D-${dleft}`:(dleft===0?'D-DAY':`D+${Math.abs(dleft)}`);
+    raceCard=`<div class="sum-card race">
+      <div class="sc-label">🏁 대회</div>
+      <div class="sc-main">${dtxt}</div>
+      <div class="sc-sub">${rd.slice(5).replace('-','/')}</div></div>`;
+  }
+
+  return `<div class="sum-grid">
+    <div class="sum-card">
+      <div class="sc-label">이번 주 운동</div>
+      <div class="sc-main">${tc}회</div>
+      <div class="sc-sub ${volCls}">${volSub}</div>
+    </div>
+    <div class="sum-card">
+      <div class="sc-label">수행 능력</div>
+      <div class="sc-main" style="font-size:${perfMain==='—'?'22px':'15px'}">${perfMain}</div>
+      <div class="sc-sub ${perfCls}">${perfSub}</div>
+    </div>
+    ${raceCard}
+  </div>`;
+}
+
 function renderAssistant(){
   const wrap=document.getElementById('wkWrap');
   if(!state.user){
@@ -1371,6 +1475,7 @@ function renderAssistant(){
       <h2>운동 기록</h2>
       <p>오늘 한 운동을 남기면, 비서가 분석할 재료가 쌓여요.</p>
     </div>
+    ${buildSummary()}
     <div class="pf-card">
       <div class="wk-toggle">
         <button class="${isAn?'on':''}" data-wktype="무산소">💪 무산소 (웨이트)</button>
