@@ -27,6 +27,11 @@
   .iab-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:20px;
     color:#0A0A0A;margin-bottom:12px;}
   .iab-desc{font-size:13.5px;line-height:1.7;color:#666;margin-bottom:22px;}
+  .iab-steps{text-align:left;background:#F6F6F4;border-radius:14px;padding:14px 16px;margin-bottom:18px;}
+  .iab-step{font-size:13.5px;line-height:1.5;color:#333;display:flex;gap:9px;align-items:flex-start;}
+  .iab-step+.iab-step{margin-top:10px;}
+  .iab-step span{flex:none;width:21px;height:21px;border-radius:50%;background:#22b2e0;color:#fff;
+    font-size:12px;font-weight:800;display:grid;place-items:center;margin-top:1px;}
   .iab-btn{width:100%;background:#22b2e0;color:#fff;border:none;border-radius:12px;
     padding:15px;font-size:15px;font-weight:800;cursor:pointer;margin-bottom:9px;}
   .iab-copy{width:100%;background:#F0F4F6;color:#22b2e0;border:none;border-radius:12px;
@@ -577,10 +582,14 @@
   <div class="iab-inner">
     <div class="iab-emoji">🌐</div>
     <div class="iab-title">외부 브라우저로 열어주세요</div>
-    <div class="iab-desc">카카오톡·인스타그램 등 앱 안에서는 구글 로그인이
-      제한돼요. 아래 버튼을 누르거나, 우측 상단 메뉴(⋮ 또는 공유)에서
-      <b>'다른 브라우저로 열기'</b>를 선택하세요.</div>
-    <button class="iab-btn" id="iabOpen">크롬/사파리로 열기</button>
+    <div class="iab-desc" id="iabDesc">카카오톡 등 앱 안에서는 구글 로그인이
+      제한돼요. 아래 안내를 따라 크롬/사파리로 열어주세요.</div>
+    <!-- 아이폰 단계 안내 (JS가 표시) -->
+    <div class="iab-steps" id="iabSteps" style="display:none">
+      <div class="iab-step"><span>1</span> 오른쪽 위·아래의 <b>메뉴(↗ 또는 ⋯)</b>를 누르세요</div>
+      <div class="iab-step"><span>2</span> <b>'Safari로 열기'</b> 또는 <b>'기본 브라우저로 열기'</b>를 선택하세요</div>
+    </div>
+    <button class="iab-btn" id="iabOpen">크롬으로 열기</button>
     <button class="iab-copy" id="iabCopy">주소 복사하기</button>
     <button class="iab-close" id="iabClose">그냥 둘러보기 (로그인 없이)</button>
   </div>
@@ -3080,17 +3089,23 @@ function goBack(){
     const openBtn=document.getElementById('iabOpen');
     const copyBtn=document.getElementById('iabCopy');
     const closeBtn=document.getElementById('iabClose');
-    if(openBtn)openBtn.onclick=()=>{
-      if(isAndroid){
+    const steps=document.getElementById('iabSteps');
+    const desc=document.getElementById('iabDesc');
+    if(isAndroid){
+      /* 안드로이드: 크롬 열기 버튼 사용 */
+      if(openBtn)openBtn.onclick=()=>{
         const clean=url.replace(/^https?:\/\//,'');
         location.href='intent://'+clean+'#Intent;scheme=https;package=com.android.chrome;end';
-      }else{
-        try{navigator.clipboard.writeText(url);}catch(e){}
-        alert('주소가 복사되었어요. Safari를 열고 주소창에 붙여넣어 주세요.');
-      }
-    };
+      };
+    }else{
+      /* 아이폰: 자동 열기 불가 → 단계 안내 표시, '크롬으로 열기' 버튼 숨김 */
+      if(steps)steps.style.display='block';
+      if(openBtn)openBtn.style.display='none';
+      if(desc)desc.textContent='카카오톡 안에서는 구글 로그인이 제한돼요. 아래 순서대로 Safari에서 열어주세요.';
+      if(copyBtn)copyBtn.textContent='또는, 주소 복사하기';
+    }
     if(copyBtn)copyBtn.onclick=async()=>{
-      try{await navigator.clipboard.writeText(url);copyBtn.textContent='✓ 복사됨 — 브라우저에 붙여넣기';}
+      try{await navigator.clipboard.writeText(url);copyBtn.textContent='✓ 복사됨 — 브라우저 주소창에 붙여넣기';}
       catch(e){
         const t=document.createElement('input');t.value=url;document.body.appendChild(t);
         t.select();try{document.execCommand('copy');copyBtn.textContent='✓ 복사됨';}catch(_){}
