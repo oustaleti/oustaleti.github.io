@@ -1215,15 +1215,19 @@ async function googleLogin(){
 }
 window.googleLogin=googleLogin;
 async function logout(){
-  await db.auth.signOut();
+  /* 서버 로그아웃 시도 (실패해도 로컬은 무조건 정리) */
+  try{ await db.auth.signOut(); }catch(e){ console.error('signOut 오류',e); }
   state.user=null;state.nick='';
   state.workouts=[];state.profile=null;state.weights=[];state.inbody=[];
-  state.voiceChat=[];state.chat=[];
-  paintNick();renderFeed();
-  if(state.view==='detail')renderDetail();
+  state.voiceChat=[];state.chat=[];state.races=[];
+  paintNick();
+  try{ renderFeed(); }catch(e){}
+  if(state.view==='detail'){ try{ closeDetail(); }catch(e){} }
   /* 현재 보고 있는 탭을 즉시 다시 그려 로그아웃 상태 반영 */
-  if(document.getElementById('tab-assistant').classList.contains('on'))renderVoice();
-  if(document.getElementById('tab-status').classList.contains('on'))renderSubPane();
+  try{
+    if(document.getElementById('tab-assistant').classList.contains('on'))renderVoice();
+    if(document.getElementById('tab-status').classList.contains('on'))renderSubPane();
+  }catch(e){ console.error('로그아웃 후 렌더 오류',e); }
   toast('로그아웃 했어요');
 }
 /* 로그인 안내 모달 (글쓰기/댓글 시도 시) */
@@ -3236,17 +3240,22 @@ function swipeTab(dir){
   renderFeed();
   if(startTab==='assistant')renderVoice();
   else if(startTab==='status')renderSubPane();
-  /* 로그인 상태 변화 감지 (구글 로그인 후 돌아왔을 때) */
+  /* 로그인 상태 변화 감지 (구글 로그인/로그아웃 시) */
   db.auth.onAuthStateChange(async()=>{
-    await loadUser();
-    await loadProfile();
-    await loadWorkouts();
-    await loadRaces();
-    await loadWeights();
-    await loadInbody();
+    try{
+      await loadUser();
+      await loadProfile();
+      await loadWorkouts();
+      await loadRaces();
+      await loadWeights();
+      await loadInbody();
+    }catch(e){ console.error('상태변화 로드 오류',e); }
     paintNick();
-    if(state.view==='detail')renderDetail();else renderFeed();
-    if(document.getElementById('tab-status').classList.contains('on'))renderSubPane();
+    try{
+      if(state.view==='detail')renderDetail();else renderFeed();
+      if(document.getElementById('tab-assistant').classList.contains('on'))renderVoice();
+      if(document.getElementById('tab-status').classList.contains('on'))renderSubPane();
+    }catch(e){ console.error('상태변화 렌더 오류',e); }
   });
 })();
 </script>
