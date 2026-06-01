@@ -1243,10 +1243,23 @@ function openLoginPrompt(){
 /* 헤더 계정 버튼 클릭 — 로그인 상태면 로그아웃 메뉴, 아니면 로그인 */
 function authBtnClick(){
   if(state.user){
-    if(confirm(state.nick+' 님으로 로그인 중입니다.\n로그아웃 할까요?'))logout();
+    openLogoutPrompt();
   }else{
     googleLogin();
   }
+}
+/* 로그아웃 확인 모달 */
+function openLogoutPrompt(){
+  document.getElementById('modal').innerHTML=`
+    <h3>로그아웃 할까요?</h3>
+    <p class="sub">${esc(state.nick||'')} 님으로 로그인 중입니다.</p>
+    <div class="modal-foot">
+      <button class="btn-ghost" id="loCancel">취소</button>
+      <button class="btn-solid" id="loConfirm">로그아웃</button>
+    </div>`;
+  showScrim();
+  document.getElementById('loCancel').onclick=hideScrim;
+  document.getElementById('loConfirm').onclick=()=>{ hideScrim(); logout(); };
 }
 const icPerson=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" stroke-linecap="round"/></svg>`;
 function paintNick(){
