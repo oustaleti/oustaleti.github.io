@@ -292,7 +292,16 @@
   .wt-d.down{color:var(--blue);}
   .wt-d.up{color:#C0392B;}
 
-  /* ===== 근력 추이 ===== */
+  /* ===== 인바디 ===== */
+  .ib-now{display:flex;gap:10px;margin-top:4px;}
+  .ib-stat{flex:1;background:#F6F6F4;border-radius:12px;padding:14px 12px;text-align:center;}
+  .ib-lab{font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:6px;}
+  .ib-val{font-size:18px;font-weight:800;color:var(--ink);}
+  .ib-d{font-size:11.5px;font-weight:800;margin-left:3px;}
+  .ib-d.good{color:var(--blue);}
+  .ib-d.bad{color:#C0392B;}
+  .ib-del{color:var(--muted);font-size:15px;margin-left:6px;width:20px;height:20px;border-radius:6px;}
+  .ib-del:hover{background:#FCE9E6;color:#C0392B;}
   .str-list{display:flex;flex-direction:column;gap:8px;}
   .str-item{display:flex;justify-content:space-between;align-items:center;
     background:var(--card);border:1px solid var(--line);border-radius:12px;
@@ -602,7 +611,7 @@ const catOf=id=>CATS.find(c=>c.id===id)||CATS[5];
 
 let state={cat:'all',sort:'recent',threads:[],nick:'',liked:new Set(),
   view:'feed',thread:null,composeCat:'road',admin:false,user:null,
-  reported:new Set(),reports:[],profile:null,workouts:[],wkType:'무산소',races:[],weights:[]};
+  reported:new Set(),reports:[],profile:null,workouts:[],wkType:'무산소',races:[],weights:[],inbody:[]};
 
 /* ---------- 닉네임/좋아요 = 이 브라우저에만 저장 ---------- */
 function lget(k){try{return localStorage.getItem(k);}catch(e){return null;}}
@@ -1386,7 +1395,9 @@ function renderStatus(){
     </div>
 
     <!-- 체중 추적 카드 -->
-    <div class="wt-card" id="wtCard"></div>`;
+    <div class="wt-card" id="wtCard"></div>
+    <!-- 인바디 기록 카드 -->
+    <div class="wt-card" id="ibCard"></div>`;
 
   /* 단일 선택 칩 (성별, 경력) */
   function chipGroup(id,attr){
@@ -1426,6 +1437,8 @@ function renderStatus(){
   if(rab)rab.onclick=addRace;
   /* 체중 추적 */
   renderWeightCard();
+  /* 인바디 */
+  renderInbodyCard();
 }
 
 /* ---------- 대회 일정 (여러 개) ---------- */
@@ -1603,6 +1616,113 @@ async function addWeight(){
     toast('체중을 기록했어요');
     renderWeightCard();
   }catch(e){console.error(e);toast('기록에 실패했어요');}
+}
+
+/* ---------- 인바디 (체지방률·골격근량) ---------- */
+async function loadInbody(){
+  if(!state.user){state.inbody=[];return;}
+  try{
+    const {data}=await db.from('inbody').select('*')
+      .eq('user_id',state.user.id).order('log_date',{ascending:true});
+    state.inbody=data||[];
+  }catch(e){state.inbody=[];}
+}
+function renderInbodyCard(){
+  const box=document.getElementById('ibCard');
+  if(!box)return;
+  const arr=state.inbody.slice().sort((a,b)=>a.log_date.localeCompare(b.log_date));
+  const latest=arr.length?arr[arr.length-1]:null;
+
+  /* 현재 수치 + 처음 대비 변화 */
+  let nowHtml='';
+  if(latest){
+    const first=arr[0];
+    const fatD=(arr.length>=2&&first.body_fat!=null&&latest.body_fat!=null)?(latest.body_fat-first.body_fat):null;
+    const musD=(arr.length>=2&&first.muscle_mass!=null&&latest.muscle_mass!=null)?(latest.muscle_mass-first.muscle_mass):null;
+    const dtag=(v,goodWhenDown)=>{
+      if(v==null||Math.abs(v)<0.05)return '';
+      const down=v<0;
+      const good=goodWhenDown?down:!down;
+      return `<span class="ib-d ${good?'good':'bad'}">${down?'▼':'▲'}${Math.abs(v).toFixed(1)}</span>`;
+    };
+    nowHtml=`<div class="ib-now">
+      <div class="ib-stat">
+        <div class="ib-lab">체지방률</div>
+        <div class="ib-val">${latest.body_fat!=null?latest.body_fat+'%':'-'} ${dtag(fatD,true)}</div>
+      </div>
+      <div class="ib-stat">
+        <div class="ib-lab">골격근량</div>
+        <div class="ib-val">${latest.muscle_mass!=null?latest.muscle_mass+'kg':'-'} ${dtag(musD,false)}</div>
+      </div>
+    </div>`;
+  }else{
+    nowHtml=`<div class="wt-hint">인바디 측정 결과(체지방률·골격근량)를 입력하면,
+      변화 추이를 추적하고 등급도 더 정확해져요.</div>`;
+  }
+
+  /* 최근 추이 */
+  let recent='';
+  if(arr.length){
+    const last5=arr.slice(-5).reverse();
+    recent=`<div class="wt-recent-head">기록 이력</div>
+      <div class="wt-recent">`+last5.map(r=>`
+        <div class="wt-rec-item">
+          <span class="wt-rec-date">${r.log_date.slice(5).replace('-','/')}</span>
+          <span class="wt-rec-w">${r.body_fat!=null?r.body_fat+'%':'-'} · ${r.muscle_mass!=null?r.muscle_mass+'kg':'-'}
+            <button class="ib-del" data-ib="${r.id}">&times;</button></span>
+        </div>`).join('')+`</div>`;
+  }
+
+  box.innerHTML=`
+    <div class="pf-sec-title" style="margin-bottom:14px">🧬 인바디 기록</div>
+    <div class="ib-input">
+      <div class="pf-row">
+        <div class="pf-field"><label>체지방률 (%)</label>
+          <input id="ibFat" type="number" min="1" max="60" step="0.1" placeholder="예: 18.5"></div>
+        <div class="pf-field"><label>골격근량 (kg)</label>
+          <input id="ibMus" type="number" min="10" max="80" step="0.1" placeholder="예: 35"></div>
+      </div>
+      <div class="wt-input-row" style="margin-top:4px">
+        <input id="ibDate" type="date" value="${todayStr()}">
+        <button class="wt-add-btn" id="ibAddBtn" style="flex:1">기록 추가</button>
+      </div>
+    </div>
+    ${nowHtml}
+    ${recent}`;
+
+  document.getElementById('ibAddBtn').onclick=addInbody;
+  box.querySelectorAll('[data-ib]').forEach(b=>b.onclick=()=>delInbody(b.dataset.ib));
+}
+async function addInbody(){
+  if(!state.user)return;
+  const dt=document.getElementById('ibDate').value||todayStr();
+  const fat=parseFloat(document.getElementById('ibFat').value);
+  const mus=parseFloat(document.getElementById('ibMus').value);
+  if(isNaN(fat)&&isNaN(mus)){toast('체지방률이나 골격근량을 입력해주세요');return;}
+  try{
+    const existing=state.inbody.find(x=>x.log_date===dt);
+    if(existing){
+      await db.from('inbody').delete().eq('id',existing.id);
+      state.inbody=state.inbody.filter(x=>x.id!==existing.id);
+    }
+    const row={user_id:state.user.id,log_date:dt,
+      body_fat:isNaN(fat)?null:fat, muscle_mass:isNaN(mus)?null:mus,
+      weight:(state.profile&&state.profile.weight)||null};
+    const {data,error}=await db.from('inbody').insert(row).select();
+    if(error)throw error;
+    if(data&&data[0])state.inbody.push(data[0]);
+    toast('인바디를 기록했어요');
+    renderInbodyCard();
+  }catch(e){console.error(e);toast('기록에 실패했어요');}
+}
+async function delInbody(id){
+  try{
+    const {error}=await db.from('inbody').delete().eq('id',id);
+    if(error)throw error;
+    state.inbody=state.inbody.filter(x=>String(x.id)!==String(id));
+    renderInbodyCard();
+    toast('기록을 삭제했어요');
+  }catch(e){console.error(e);toast('삭제에 실패했어요');}
 }
 
 async function saveProfile(){
@@ -1859,13 +1979,27 @@ function buildGradeCard(){
     strScore=Math.round(sum/keys.length);
   }
 
-  /* ---- 2) 체성분 점수: BMI (WHO) ---- */
-  let bmiScore=null, bmiTxt='';
-  if(p.height&&bw){
+  /* ---- 2) 체성분 점수: 인바디 체지방률 우선, 없으면 BMI ---- */
+  let bmiScore=null, bmiTxt='', bodyBasis='';
+  const ibArr=(state.inbody||[]).slice().sort((a,b)=>a.log_date.localeCompare(b.log_date));
+  const latestIb=ibArr.length?ibArr[ibArr.length-1]:null;
+  if(latestIb&&latestIb.body_fat!=null){
+    /* 체지방률 기준 (남성: 10-20 양호 / 여성: 18-28 양호) */
+    const bf=latestIb.body_fat;
+    bmiTxt=bf+'%';
+    bodyBasis='체지방률';
+    if(isM){
+      if(bf<=12)bmiScore=100; else if(bf<=16)bmiScore=92; else if(bf<=20)bmiScore=80;
+      else if(bf<=25)bmiScore=62; else bmiScore=45;
+    }else{
+      if(bf<=20)bmiScore=100; else if(bf<=24)bmiScore=92; else if(bf<=28)bmiScore=80;
+      else if(bf<=33)bmiScore=62; else bmiScore=45;
+    }
+  }else if(p.height&&bw){
     const h=p.height/100;
     const bmi=bw/(h*h);
     bmiTxt=bmi.toFixed(1);
-    /* 18.5~24.9 정상 = 만점, 멀어질수록 감점 */
+    bodyBasis='BMI';
     if(bmi>=18.5&&bmi<23)bmiScore=100;
     else if(bmi>=23&&bmi<25)bmiScore=85;
     else if(bmi>=25&&bmi<28)bmiScore=65;
@@ -1909,7 +2043,7 @@ function buildGradeCard(){
         <div class="gc-sub">${subBits.join(' · ')}</div>
       </div>
     </div>
-    ${strList?`<div class="gc-detail">${strList}${bmiTxt?`<div class="gc-row"><span>BMI</span><span>${bmiTxt}</span></div>`:''}</div>`:''}
+    ${strList?`<div class="gc-detail">${strList}${bmiTxt?`<div class="gc-row"><span>${bodyBasis||'BMI'}</span><span>${bmiTxt}</span></div>`:''}</div>`:''}
     <div class="gc-note">전 세계 표준 기준표(체중 대비 근력비·BMI·WHO 유산소 권장량)로
       산정한 참고용 등급이에요. 데이터가 쌓일수록 정확해져요.</div>
   </div>`;
@@ -2141,6 +2275,7 @@ document.getElementById('replyPhotoIn').onchange=function(){
   await loadWorkouts();
   await loadRaces();
   await loadWeights();
+  await loadInbody();
   state.admin=lget('ost_admin')==='1';
   try{const lk=lget('ost_liked');if(lk)state.liked=new Set(JSON.parse(lk));}catch(e){}
   try{const rp=lget('ost_reported');if(rp)state.reported=new Set(JSON.parse(rp));}catch(e){}
@@ -2157,6 +2292,7 @@ document.getElementById('replyPhotoIn').onchange=function(){
     await loadWorkouts();
     await loadRaces();
     await loadWeights();
+    await loadInbody();
     paintNick();
     if(state.view==='detail')renderDetail();else renderFeed();
     if(document.getElementById('tab-status').classList.contains('on'))renderStatus();
