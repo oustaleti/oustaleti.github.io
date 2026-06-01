@@ -1220,14 +1220,11 @@ async function logout(){
   state.user=null;state.nick='';
   state.workouts=[];state.profile=null;state.weights=[];state.inbody=[];
   state.voiceChat=[];state.chat=[];state.races=[];
+  state.view='feed';state.thread=null;
   paintNick();
   try{ renderFeed(); }catch(e){}
-  if(state.view==='detail'){ try{ closeDetail(); }catch(e){} }
-  /* 현재 보고 있는 탭을 즉시 다시 그려 로그아웃 상태 반영 */
-  try{
-    if(document.getElementById('tab-assistant').classList.contains('on'))renderVoice();
-    if(document.getElementById('tab-status').classList.contains('on'))renderSubPane();
-  }catch(e){ console.error('로그아웃 후 렌더 오류',e); }
+  /* 로그아웃하면 무조건 홈(비서 탭)으로 이동 */
+  try{ switchTab('assistant'); }catch(e){ console.error('로그아웃 후 이동 오류',e); }
   toast('로그아웃 했어요');
 }
 /* 로그인 안내 모달 (글쓰기/댓글 시도 시) */
