@@ -183,6 +183,7 @@
     padding:20px 18px;box-shadow:var(--shadow);}
   .pf-sec-title{font-size:12px;font-weight:800;color:var(--blue);
     letter-spacing:.04em;margin:4px 0 14px;}
+  .pf-hint-line{font-size:12px;color:var(--muted);line-height:1.55;margin:-8px 0 14px;}
   .pf-row{display:flex;gap:12px;margin-bottom:14px;}
   .pf-field{flex:1;display:flex;flex-direction:column;gap:6px;}
   .pf-field label{font-size:12.5px;font-weight:700;color:var(--muted);}
@@ -362,6 +363,13 @@
     line-height:1.05;letter-spacing:-.02em;}
   .gc-score span{font-size:15px;opacity:.7;font-weight:700;}
   .gc-sub{font-size:11.5px;opacity:.85;font-weight:700;margin-top:2px;}
+  /* 부문별 등급 3칸 */
+  .gc-subs{display:flex;gap:8px;margin-top:16px;}
+  .gc-sub-item{flex:1;background:rgba(255,255,255,.14);border-radius:13px;
+    padding:13px 8px;text-align:center;}
+  .gc-sub-badge{font-family:'Bricolage Grotesque';font-weight:800;font-size:24px;line-height:1;}
+  .gc-sub-name{font-size:11.5px;font-weight:700;opacity:.9;margin-top:6px;}
+  .gc-sub-score{font-size:10.5px;opacity:.75;font-weight:700;margin-top:2px;}
   .gc-detail{margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.2);
     display:flex;flex-direction:column;gap:7px;}
   .gc-row{display:flex;justify-content:space-between;font-size:12.5px;
@@ -1562,6 +1570,27 @@ function renderStatus(){
           placeholder="예: 오른쪽 무릎이 안 좋아요 / 단백질 보충제 먹는 중 / 주 4회 운동">${esc(p.note||'')}</textarea>
       </div>
 
+      <div class="pf-sec-title" style="margin-top:18px">초기 체력 <span style="font-weight:600;color:var(--muted);font-size:11px">· 선택 · 지금 수준을 적으면 바로 등급이 나와요</span></div>
+      <div class="pf-hint-line">아는 것만 적어도 돼요. 이후 운동 기록이 쌓이면 실제 기록이 우선 반영돼요.</div>
+      <div class="pf-row">
+        <div class="pf-field"><label>벤치프레스 (kg)</label>
+          <input id="pfBench" type="number" min="0" step="2.5" placeholder="1회 최대" value="${p.init_bench??''}"></div>
+        <div class="pf-field"><label>스쿼트 (kg)</label>
+          <input id="pfSquat" type="number" min="0" step="2.5" placeholder="1회 최대" value="${p.init_squat??''}"></div>
+      </div>
+      <div class="pf-row">
+        <div class="pf-field"><label>데드리프트 (kg)</label>
+          <input id="pfDead" type="number" min="0" step="2.5" placeholder="1회 최대" value="${p.init_dead??''}"></div>
+        <div class="pf-field"><label>사이클 평속 (km/h)</label>
+          <input id="pfCycle" type="number" min="0" step="0.5" placeholder="평소 평균" value="${p.init_cycle_kmh??''}"></div>
+      </div>
+      <div class="pf-row">
+        <div class="pf-field"><label>러닝 거리 (km)</label>
+          <input id="pfRunKm" type="number" min="0" step="0.5" placeholder="예: 10" value="${p.init_run_km??''}"></div>
+        <div class="pf-field"><label>그 거리 기록 (분)</label>
+          <input id="pfRunMin" type="number" min="0" step="1" placeholder="예: 50" value="${p.init_run_min??''}"></div>
+      </div>
+
       <button class="pf-save" id="pfSave">저장하기</button>
       <div class="pf-saved-note" id="pfSavedNote">${p.updated_at?'마지막 저장: '+ago(p.updated_at):''}</div>
     </div>
@@ -2029,6 +2058,12 @@ async function saveProfile(){
     target_weight:(()=>{const el=document.getElementById('pfTargetW');if(!el||!allGoals.includes('체중감량'))return null;const n=parseFloat(el.value);return isNaN(n)?null:n;})(),
     target_date:(()=>{const el=document.getElementById('pfTargetD');return(el&&allGoals.includes('체중감량')&&el.value)?el.value:null;})(),
     note:document.getElementById('pfNote').value.trim()||null,
+    init_bench:num(document.getElementById('pfBench').value),
+    init_squat:num(document.getElementById('pfSquat').value),
+    init_dead:num(document.getElementById('pfDead').value),
+    init_cycle_kmh:num(document.getElementById('pfCycle').value),
+    init_run_km:num(document.getElementById('pfRunKm').value),
+    init_run_min:num(document.getElementById('pfRunMin').value),
     updated_at:new Date().toISOString()
   };
   btn.disabled=true;btn.textContent='저장 중...';
@@ -2566,14 +2601,15 @@ function buildGradeCard(){
   const isM=(sex!=='여');
   const oneRM=w=>w.weight==null?null:w.weight*(1+(w.reps||1)/30);
 
-  /* 데이터 충분한지 — 체중 + 운동 기록 최소 1개(무산소든 유산소든) */
-  const anyWorkout=ws.length>0;
+  /* 데이터 충분한지 — 체중 + (운동 기록 또는 초기 체력값) */
+  const hasInit=!!(p.init_bench||p.init_squat||p.init_dead||p.init_run_km||p.init_cycle_kmh);
+  const anyWorkout=ws.length>0||hasInit;
   if(!bw||!anyWorkout){
     return `<div class="grade-card locked">
       <div class="gc-emoji">📋</div>
       <div class="gc-locktitle">아직 등급을 매길 수 없어요</div>
-      <div class="gc-lockdesc">${!bw?'프로필에 체중을 입력하고, ':''}운동을
-        한 번 이상 기록하면 — 전 세계 표준 기준으로 내 몸의 등급을 책정해드려요.</div>
+      <div class="gc-lockdesc">${!bw?'프로필에 체중을 입력하고, ':''}운동을 기록하거나
+        프로필에서 초기 체력을 입력하면 — 전 세계 표준 기준으로 등급을 책정해드려요.</div>
     </div>`;
   }
 
@@ -2617,6 +2653,11 @@ function buildGradeCard(){
     const rm=oneRM(w);
     if(STD[key]&&(bestRM[key]==null||rm>bestRM[key]))bestRM[key]=rm;
   });
+  /* 초기 체력값 시드 — 실제 기록이 더 높으면 자동으로 우선됨(max) */
+  const seedRM=(key,val)=>{if(val>0&&(bestRM[key]==null||val>bestRM[key]))bestRM[key]=val;};
+  seedRM('벤치프레스',p.init_bench);
+  seedRM('스쿼트',p.init_squat);
+  seedRM('데드리프트',p.init_dead);
   /* 맨몸운동 최고 횟수 (무게 없는 운동) */
   const bestRep={};
   ws.filter(w=>w.type==='무산소'&&w.weight==null&&w.exercise&&(w.reps||w.duration)).forEach(w=>{
@@ -2690,34 +2731,41 @@ function buildGradeCard(){
     else bmiScore=70; /* 저체중 */
   }
 
-  /* ---- 3) 유산소 점수: 양(WHO 시간) + 질(사이클 평속) 결합 ---- */
+  /* ---- 3) 유산소 점수: 양(WHO 시간) + 질(속도) 결합 ---- */
   const now=Date.now();
   const weekAe=ws.filter(w=>w.type==='유산소'&&(now-new Date(w.created_at).getTime())<7*86400000);
   const aeMin=weekAe.reduce((s,w)=>s+(w.duration||0),0);
-  let aeScore=null, aeSpeedLv=null, aeSpeedTxt='';
-  if(weekAe.length){
-    /* (a) 양 점수: 주간 시간 vs WHO 150분 */
-    const volScore=Math.min(100,Math.round((aeMin/150)*100));
-    /* (b) 질 점수: 사이클 계열의 평균 속도(km/h) 기준표 */
-    /* 거리·시간 둘 다 있는 사이클/러닝 기록에서 최고 평속 계산 */
-    let bestSpeed=0;
-    weekAe.forEach(w=>{
-      if(w.distance>0&&w.duration>0){
-        const kmh=w.distance/(w.duration/60);
-        if(kmh>bestSpeed)bestSpeed=kmh;
-      }
-    });
-    let qualScore=null;
-    if(bestSpeed>0){
-      /* 사이클 평속 기준표(참고용): [입문,초급,중급,상급,엘리트] km/h */
-      const SPD=[18,23,28,33,38];
-      let lv=0;for(let i=0;i<SPD.length;i++){if(bestSpeed>=SPD[i])lv=i;}
-      aeSpeedLv=levelLabels[lv];
-      aeSpeedTxt=`평속 ${bestSpeed.toFixed(1)}km/h · ${aeSpeedLv}`;
-      qualScore=Math.min(100,Math.round((bestSpeed/SPD[4])*100));
+  /* 질(속도) 기준표 — 사이클 평속 [입문,초급,중급,상급,엘리트] km/h */
+  const SPD=[18,23,28,33,38];
+  /* 러닝 페이스 환산: 러닝은 사이클보다 느리므로 km/h를 약 1.9배로 보정해 동일 잣대 */
+  let bestSpeed=0, speedFrom='';
+  weekAe.forEach(w=>{
+    if(w.distance>0&&w.duration>0){
+      const kmh=w.distance/(w.duration/60);
+      if(kmh>bestSpeed){bestSpeed=kmh;speedFrom='기록';}
     }
-    /* 양 60% + 질 40% (질 데이터 없으면 양만) */
-    aeScore=(qualScore!=null)?Math.round(volScore*0.6+qualScore*0.4):volScore;
+  });
+  /* 초기 사이클 평속 */
+  if(p.init_cycle_kmh>0&&p.init_cycle_kmh>bestSpeed){bestSpeed=p.init_cycle_kmh;speedFrom='초기값';}
+  /* 초기 러닝 기록 → 사이클 환산 속도로 비교 */
+  if(p.init_run_km>0&&p.init_run_min>0){
+    const runKmh=p.init_run_km/(p.init_run_min/60);
+    const eqv=runKmh*1.9; /* 러닝→사이클 난이도 환산 */
+    if(eqv>bestSpeed){bestSpeed=eqv;speedFrom='초기값(러닝)';}
+  }
+  let aeScore=null, aeSpeedTxt='';
+  let qualScore=null;
+  if(bestSpeed>0){
+    let lv=0;for(let i=0;i<SPD.length;i++){if(bestSpeed>=SPD[i])lv=i;}
+    qualScore=Math.min(100,Math.round((bestSpeed/SPD[4])*100));
+    aeSpeedTxt=`${levelLabels[lv]}`;
+  }
+  if(weekAe.length){
+    const volScore=Math.min(100,Math.round((aeMin/150)*100));
+    aeScore=(qualScore!=null)?Math.round(volScore*0.5+qualScore*0.5):volScore;
+  }else if(qualScore!=null){
+    /* 주간 기록은 없지만 초기 능력치가 있으면 질 점수로 (양 데이터 부족 감안 약간 감점) */
+    aeScore=Math.round(qualScore*0.85);
   }
 
   /* ---- 3-b) 하이록스(HYROX) — 완주 시간 기반 별도 평가 ---- */
@@ -2758,35 +2806,39 @@ function buildGradeCard(){
   const parts=[strScore,bmiScore,aeScore].filter(v=>v!=null);
   const base=parts.reduce((a,b)=>a+b,0)/parts.length;
   const total=Math.round(base*volFactor);
-  /* 등급 환산 */
-  const grade=
-    total>=90?{g:'S',label:'엘리트',cls:'gs'}:
-    total>=75?{g:'A',label:'상급',cls:'ga'}:
-    total>=60?{g:'B',label:'중급',cls:'gb'}:
-    total>=40?{g:'C',label:'초급',cls:'gc'}:
-              {g:'D',label:'입문',cls:'gd'};
-
-  const subBits=[];
-  if(strUnmeasured)subBits.push('근력 미측정(0)');
-  else if(strScore!=null)subBits.push(`근력 ${strScore}`);
-  if(bmiScore!=null)subBits.push(`체성분 ${bmiScore}`);
-  if(aeScore!=null)subBits.push(`유산소 ${aeScore}`);
+  /* 점수 → 등급 변환 헬퍼 */
+  const toGrade=(sc)=>
+    sc==null?{g:'–',label:'미측정',cls:'gd'}:
+    sc>=90?{g:'S',label:'엘리트',cls:'gs'}:
+    sc>=75?{g:'A',label:'상급',cls:'ga'}:
+    sc>=60?{g:'B',label:'중급',cls:'gb'}:
+    sc>=40?{g:'C',label:'초급',cls:'gc'}:
+           {g:'D',label:'입문',cls:'gd'};
+  const grade=toGrade(total);
+  /* 부문별 등급 */
+  const gStr=strUnmeasured?toGrade(null):toGrade(strScore);
+  const gAe=toGrade(aeScore);
+  const gBody=toGrade(bmiScore);
 
   const strList=strDetail.map(s=>
     `<div class="gc-row"><span>${esc(s.k)}</span>
      <span><b>${esc(s.info)}</b></span></div>`).join('');
-  /* 근력 미측정 안내 행 */
   const strHint=strUnmeasured?
-    `<div class="gc-row"><span>근력</span><span>벤치·스쿼트·데드 무게 기록 시 반영</span></div>`:'';
-  /* 볼륨 감쇄 안내 */
+    `<div class="gc-row"><span>근력</span><span>벤치·스쿼트·데드 기록 시 반영</span></div>`:'';
   const volHint=(volFactor<1)?
     `<div class="gc-row"><span>운동량</span><span>아직 적어요 (점수 ${Math.round(volFactor*100)}% 반영)</span></div>`:'';
-  /* 유산소 속도(질) 안내 */
   const aeHint=aeSpeedTxt?
     `<div class="gc-row"><span>유산소 강도</span><span><b>${aeSpeedTxt}</b></span></div>`:'';
-  /* 하이록스 안내 */
   const hyroxHint=hyroxTxt?
     `<div class="gc-row"><span>🔥 하이록스</span><span><b>${hyroxTxt}</b></span></div>`:'';
+
+  /* 부문 등급 3칸 */
+  const subGrade=(emoji,name,g,sc)=>`
+    <div class="gc-sub-item ${g.cls}">
+      <div class="gc-sub-badge">${g.g}</div>
+      <div class="gc-sub-name">${emoji} ${name}</div>
+      <div class="gc-sub-score">${sc==null?'미측정':sc+'점'}</div>
+    </div>`;
 
   return `<div class="grade-card ${grade.cls}">
     <div class="gc-top">
@@ -2794,13 +2846,16 @@ function buildGradeCard(){
       <div class="gc-meta">
         <div class="gc-title">종합 등급 · ${grade.label}</div>
         <div class="gc-score">${total}<span>/100</span></div>
-        <div class="gc-sub">${subBits.join(' · ')}</div>
       </div>
     </div>
+    <div class="gc-subs">
+      ${subGrade('💪','무산소',gStr,strUnmeasured?null:strScore)}
+      ${subGrade('🏃','유산소',gAe,aeScore)}
+      ${subGrade('🧬','체성분',gBody,bmiScore)}
+    </div>
     <div class="gc-detail">${strList}${strHint}${bmiTxt?`<div class="gc-row"><span>${bodyBasis||'BMI'}</span><span>${bmiTxt}</span></div>`:''}${aeHint}${hyroxHint}${volHint}</div>
-    <div class="gc-note">전 세계 표준 기준표(체중 대비 근력비·체성분·WHO 유산소 권장량)로
-      산정한 참고용 등급이에요. 근력은 벤치·스쿼트·데드리프트 무게 기록으로,
-      운동량이 쌓일수록 점수가 정확·상승해요.</div>
+    <div class="gc-note">무산소·유산소·체성분을 전 세계 표준 기준표로 각각 평가하고,
+      평균으로 종합 등급을 냅니다. 참고용이며, 기록이 쌓일수록 정확해져요.</div>
   </div>`;
 }
 
