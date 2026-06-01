@@ -18,6 +18,21 @@
     --blue:#22b2e0;
     --shadow:0 1px 0 rgba(10,10,10,.05), 0 14px 28px -20px rgba(10,10,10,.45);
   }
+  /* 인앱 브라우저 안내 배너 */
+  #inappBanner{position:fixed;inset:0;z-index:9999;background:rgba(10,10,10,.72);
+    display:flex;align-items:center;justify-content:center;padding:24px;}
+  #inappBanner .iab-inner{background:#fff;border-radius:20px;padding:30px 24px;
+    max-width:360px;width:100%;text-align:center;box-shadow:0 20px 50px -10px rgba(0,0,0,.5);}
+  .iab-emoji{font-size:42px;margin-bottom:14px;}
+  .iab-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:20px;
+    color:#0A0A0A;margin-bottom:12px;}
+  .iab-desc{font-size:13.5px;line-height:1.7;color:#666;margin-bottom:22px;}
+  .iab-btn{width:100%;background:#22b2e0;color:#fff;border:none;border-radius:12px;
+    padding:15px;font-size:15px;font-weight:800;cursor:pointer;margin-bottom:9px;}
+  .iab-copy{width:100%;background:#F0F4F6;color:#22b2e0;border:none;border-radius:12px;
+    padding:14px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:9px;}
+  .iab-close{width:100%;background:none;color:#999;border:none;padding:8px;
+    font-size:13px;font-weight:600;cursor:pointer;text-decoration:underline;}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;}
   body{font-family:'Pretendard',sans-serif;background:var(--bg);color:var(--ink);
@@ -556,6 +571,20 @@
 </style>
 </head>
 <body>
+
+<!-- 인앱 브라우저(카톡 등) 안내 배너 -->
+<div id="inappBanner" style="display:none">
+  <div class="iab-inner">
+    <div class="iab-emoji">🌐</div>
+    <div class="iab-title">외부 브라우저로 열어주세요</div>
+    <div class="iab-desc">카카오톡·인스타그램 등 앱 안에서는 구글 로그인이
+      제한돼요. 아래 버튼을 누르거나, 우측 상단 메뉴(⋮ 또는 공유)에서
+      <b>'다른 브라우저로 열기'</b>를 선택하세요.</div>
+    <button class="iab-btn" id="iabOpen">크롬/사파리로 열기</button>
+    <button class="iab-copy" id="iabCopy">주소 복사하기</button>
+    <button class="iab-close" id="iabClose">그냥 둘러보기 (로그인 없이)</button>
+  </div>
+</div>
 
 <!-- ▼▼▼ SUPABASE 라이브러리 ▼▼▼ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -3022,6 +3051,59 @@ function goBack(){
   if(state.view==='detail'){ closeDetail(); return; }
   if(!document.getElementById('tab-assistant').classList.contains('on')){ switchTab('assistant'); }
 }
+
+/* ---------- 인앱 브라우저(카톡 등) 감지 & 안내 ---------- */
+(function(){
+  const ua=navigator.userAgent||'';
+  const inApp=/KAKAOTALK|Instagram|FBAN|FBAV|Line\/|NAVER|DaumApps|; wv\)|Snapchat|Twitter|everytimeApp|Band/i.test(ua);
+  if(!inApp)return;
+  const isAndroid=/Android/i.test(ua);
+  const url=location.href;
+  const showBanner=()=>{
+    const b=document.getElementById('inappBanner');
+    if(b)b.style.display='flex';
+  };
+  /* 안드로이드: 크롬으로 자동 전환 시도 (intent) */
+  if(isAndroid){
+    try{
+      const clean=url.replace(/^https?:\/\//,'');
+      location.href='intent://'+clean+'#Intent;scheme=https;package=com.android.chrome;end';
+    }catch(e){}
+    /* 자동 전환이 안 되면 배너 노출 */
+    setTimeout(showBanner,1200);
+  }else{
+    /* 아이폰 등: 자동 전환 어려움 → 바로 안내 */
+    showBanner();
+  }
+  /* 배너 버튼들 연결 (DOM 준비 여부 상관없이) */
+  const wireBanner=()=>{
+    const openBtn=document.getElementById('iabOpen');
+    const copyBtn=document.getElementById('iabCopy');
+    const closeBtn=document.getElementById('iabClose');
+    if(openBtn)openBtn.onclick=()=>{
+      if(isAndroid){
+        const clean=url.replace(/^https?:\/\//,'');
+        location.href='intent://'+clean+'#Intent;scheme=https;package=com.android.chrome;end';
+      }else{
+        try{navigator.clipboard.writeText(url);}catch(e){}
+        alert('주소가 복사되었어요. Safari를 열고 주소창에 붙여넣어 주세요.');
+      }
+    };
+    if(copyBtn)copyBtn.onclick=async()=>{
+      try{await navigator.clipboard.writeText(url);copyBtn.textContent='✓ 복사됨 — 브라우저에 붙여넣기';}
+      catch(e){
+        const t=document.createElement('input');t.value=url;document.body.appendChild(t);
+        t.select();try{document.execCommand('copy');copyBtn.textContent='✓ 복사됨';}catch(_){}
+        document.body.removeChild(t);
+      }
+    };
+    if(closeBtn)closeBtn.onclick=()=>{
+      document.getElementById('inappBanner').style.display='none';
+    };
+  };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wireBanner);
+  else wireBanner();
+})();
 
 /* ---------- 시작 ---------- */
 (async function init(){
