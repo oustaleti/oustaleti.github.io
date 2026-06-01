@@ -2532,7 +2532,18 @@ function buildGradeCard(){
   const ALIAS={'벤치':'벤치프레스','bench':'벤치프레스','스쿼트':'스쿼트','squat':'스쿼트',
     '데드':'데드리프트','데드리프트':'데드리프트','deadlift':'데드리프트'};
   const levelLabels=['입문','초급','중급','상급','엘리트'];
-  /* 종목별 최고 1RM */
+  /* 맨몸운동: 한 세트 최대 횟수 기준표 [입문,초급,중급,상급,엘리트] */
+  const BODY={
+    '푸쉬업':isM?[10,20,30,45,70]:[5,12,20,30,50],
+    '턱걸이':isM?[1,5,10,15,25]:[1,3,7,12,20],
+    '맨몸스쿼트':isM?[20,35,50,75,110]:[15,30,45,65,100],
+    '플랭크초':isM?[30,60,120,180,300]:[30,60,120,180,300] /* 초 단위 */
+  };
+  const BODY_ALIAS={'푸쉬업':'푸쉬업','푸시업':'푸쉬업','팔굽혀':'푸쉬업','pushup':'푸쉬업','push-up':'푸쉬업',
+    '턱걸이':'턱걸이','풀업':'턱걸이','pullup':'턱걸이','pull-up':'턱걸이','친업':'턱걸이',
+    '맨몸스쿼트':'맨몸스쿼트','맨몸 스쿼트':'맨몸스쿼트','에어스쿼트':'맨몸스쿼트',
+    '플랭크':'플랭크초','plank':'플랭크초'};
+  /* 종목별 최고 1RM (무게 운동) */
   const bestRM={};
   ws.filter(w=>w.type==='무산소'&&w.weight!=null&&w.exercise).forEach(w=>{
     let key=w.exercise.trim();
@@ -2540,24 +2551,47 @@ function buildGradeCard(){
     const rm=oneRM(w);
     if(STD[key]&&(bestRM[key]==null||rm>bestRM[key]))bestRM[key]=rm;
   });
+  /* 맨몸운동 최고 횟수 (무게 없는 운동) */
+  const bestRep={};
+  ws.filter(w=>w.type==='무산소'&&w.weight==null&&w.exercise&&(w.reps||w.duration)).forEach(w=>{
+    let raw=w.exercise.trim().toLowerCase().replace(/\s/g,'');
+    let key=null;
+    for(const a in BODY_ALIAS){if(raw.includes(a.toLowerCase().replace(/\s/g,''))){key=BODY_ALIAS[a];break;}}
+    if(!key)return;
+    /* 플랭크는 시간(초), 나머진 횟수 */
+    const val=(key==='플랭크초')?(w.duration?w.duration*60:(w.reps||0)):(w.reps||0);
+    if(val>0&&(bestRep[key]==null||val>bestRep[key]))bestRep[key]=val;
+  });
+  const scoreFromTable=(val,tbl)=>{
+    let lv=0;
+    for(let i=0;i<tbl.length;i++){if(val>=tbl[i])lv=i;}
+    return {sc:Math.min(100,Math.round((val/tbl[4])*100)),lv};
+  };
   let strScore=null, strDetail=[], strUnmeasured=false;
-  const keys=Object.keys(bestRM);
-  if(keys.length){
-    let sum=0;
-    keys.forEach(k=>{
+  const wKeys=Object.keys(bestRM);
+  const bKeys=Object.keys(bestRep);
+  if(wKeys.length||bKeys.length){
+    let sum=0,cnt=0;
+    /* 무게 운동 점수 */
+    wKeys.forEach(k=>{
       const ratio=bestRM[k]/bw;
       const std=STD[k];
-      /* 0~4 레벨 점수 환산 (보간) */
       let lv=0;
       for(let i=0;i<std.length;i++){if(ratio>=std[i])lv=i;}
-      /* 0~100 점수: 레벨 기반 */
-      const sc=Math.min(100,Math.round((ratio/std[4])*100));
-      sum+=sc;
-      strDetail.push({k,ratio:ratio.toFixed(2),lv:levelLabels[lv]});
+      sum+=Math.min(100,Math.round((ratio/std[4])*100));cnt++;
+      strDetail.push({k,info:`체중 ${ratio.toFixed(2)}배 · ${levelLabels[lv]}`});
     });
-    strScore=Math.round(sum/keys.length);
+    /* 맨몸운동 점수 (참고용) */
+    bKeys.forEach(k=>{
+      const {sc,lv}=scoreFromTable(bestRep[k],BODY[k]);
+      sum+=sc;cnt++;
+      const label=(k==='플랭크초')?'플랭크':k;
+      const unit=(k==='플랭크초')?`${bestRep[k]}초`:`${bestRep[k]}회`;
+      strDetail.push({k:label,info:`${unit} · ${levelLabels[lv]}`});
+    });
+    strScore=Math.round(sum/cnt);
   }else{
-    /* 3대 운동(벤치·스쿼트·데드) 무게 기록이 없으면 근력 미측정 → 0점으로 반영 */
+    /* 근력 데이터 전혀 없으면 미측정 → 0점으로 반영 */
     strScore=0;
     strUnmeasured=true;
   }
@@ -2590,12 +2624,35 @@ function buildGradeCard(){
     else bmiScore=70; /* 저체중 */
   }
 
-  /* ---- 3) 유산소 점수: 주간 유산소 시간 (WHO 권장 150분 기준) ---- */
+  /* ---- 3) 유산소 점수: 양(WHO 시간) + 질(사이클 평속) 결합 ---- */
   const now=Date.now();
   const weekAe=ws.filter(w=>w.type==='유산소'&&(now-new Date(w.created_at).getTime())<7*86400000);
   const aeMin=weekAe.reduce((s,w)=>s+(w.duration||0),0);
-  let aeScore=null;
-  if(weekAe.length){aeScore=Math.min(100,Math.round((aeMin/150)*100));}
+  let aeScore=null, aeSpeedLv=null, aeSpeedTxt='';
+  if(weekAe.length){
+    /* (a) 양 점수: 주간 시간 vs WHO 150분 */
+    const volScore=Math.min(100,Math.round((aeMin/150)*100));
+    /* (b) 질 점수: 사이클 계열의 평균 속도(km/h) 기준표 */
+    /* 거리·시간 둘 다 있는 사이클/러닝 기록에서 최고 평속 계산 */
+    let bestSpeed=0;
+    weekAe.forEach(w=>{
+      if(w.distance>0&&w.duration>0){
+        const kmh=w.distance/(w.duration/60);
+        if(kmh>bestSpeed)bestSpeed=kmh;
+      }
+    });
+    let qualScore=null;
+    if(bestSpeed>0){
+      /* 사이클 평속 기준표(참고용): [입문,초급,중급,상급,엘리트] km/h */
+      const SPD=[18,23,28,33,38];
+      let lv=0;for(let i=0;i<SPD.length;i++){if(bestSpeed>=SPD[i])lv=i;}
+      aeSpeedLv=levelLabels[lv];
+      aeSpeedTxt=`평속 ${bestSpeed.toFixed(1)}km/h · ${aeSpeedLv}`;
+      qualScore=Math.min(100,Math.round((bestSpeed/SPD[4])*100));
+    }
+    /* 양 60% + 질 40% (질 데이터 없으면 양만) */
+    aeScore=(qualScore!=null)?Math.round(volScore*0.6+qualScore*0.4):volScore;
+  }
 
   /* ---- 4) 운동량(볼륨) 계수 — 맛보기 수준이면 점수 감쇄 ---- */
   /* 이번 주 무산소 총 세트 + 유산소 시간(분)을 합산해 '주간 활동량' 추정 */
@@ -2627,13 +2684,16 @@ function buildGradeCard(){
 
   const strList=strDetail.map(s=>
     `<div class="gc-row"><span>${esc(s.k)}</span>
-     <span>체중 ${s.ratio}배 · <b>${s.lv}</b></span></div>`).join('');
+     <span><b>${esc(s.info)}</b></span></div>`).join('');
   /* 근력 미측정 안내 행 */
   const strHint=strUnmeasured?
     `<div class="gc-row"><span>근력</span><span>벤치·스쿼트·데드 무게 기록 시 반영</span></div>`:'';
   /* 볼륨 감쇄 안내 */
   const volHint=(volFactor<1)?
     `<div class="gc-row"><span>운동량</span><span>아직 적어요 (점수 ${Math.round(volFactor*100)}% 반영)</span></div>`:'';
+  /* 유산소 속도(질) 안내 */
+  const aeHint=aeSpeedTxt?
+    `<div class="gc-row"><span>유산소 강도</span><span><b>${aeSpeedTxt}</b></span></div>`:'';
 
   return `<div class="grade-card ${grade.cls}">
     <div class="gc-top">
@@ -2644,7 +2704,7 @@ function buildGradeCard(){
         <div class="gc-sub">${subBits.join(' · ')}</div>
       </div>
     </div>
-    <div class="gc-detail">${strList}${strHint}${bmiTxt?`<div class="gc-row"><span>${bodyBasis||'BMI'}</span><span>${bmiTxt}</span></div>`:''}${volHint}</div>
+    <div class="gc-detail">${strList}${strHint}${bmiTxt?`<div class="gc-row"><span>${bodyBasis||'BMI'}</span><span>${bmiTxt}</span></div>`:''}${aeHint}${volHint}</div>
     <div class="gc-note">전 세계 표준 기준표(체중 대비 근력비·체성분·WHO 유산소 권장량)로
       산정한 참고용 등급이에요. 근력은 벤치·스쿼트·데드리프트 무게 기록으로,
       운동량이 쌓일수록 점수가 정확·상승해요.</div>
