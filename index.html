@@ -391,6 +391,27 @@
   .ai-typing span:nth-child(2){animation-delay:.2s;}
   .ai-typing span:nth-child(3){animation-delay:.4s;}
   @keyframes aiblink{0%,60%,100%{opacity:.25;}30%{opacity:1;}}
+
+  /* ===== 음성 비서 ===== */
+  .voice-screen{padding:22px 18px 40px;display:flex;flex-direction:column;align-items:center;
+    min-height:calc(100vh - 160px);}
+  .voice-msgs{width:100%;flex:1;overflow-y:auto;display:flex;flex-direction:column;
+    gap:9px;margin-bottom:18px;max-height:46vh;}
+  .voice-status{min-height:4px;}
+  .mic-btn{width:96px;height:96px;border-radius:50%;background:var(--blue);color:#fff;
+    display:grid;place-items:center;box-shadow:0 12px 30px -8px rgba(34,178,224,.6);
+    transition:.18s;margin-top:8px;}
+  .mic-btn svg{width:42px;height:42px;}
+  .mic-btn:hover{transform:scale(1.04);}
+  .mic-btn.listening{background:#C0392B;box-shadow:0 0 0 0 rgba(192,57,43,.5);
+    animation:micpulse 1.3s infinite;}
+  .mic-btn.thinking{background:var(--ink);animation:none;opacity:.7;}
+  @keyframes micpulse{
+    0%{box-shadow:0 0 0 0 rgba(192,57,43,.5);}
+    70%{box-shadow:0 0 0 22px rgba(192,57,43,0);}
+    100%{box-shadow:0 0 0 0 rgba(192,57,43,0);}}
+  .voice-hint{margin-top:18px;font-size:14px;font-weight:700;color:var(--muted);
+    text-align:center;min-height:20px;max-width:90%;line-height:1.5;}
   .clamp{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;}
   .card-actions{display:flex;gap:18px;align-items:center;
     border-top:1px dashed var(--line);padding-top:10px;}
@@ -675,7 +696,8 @@ const catOf=id=>CATS.find(c=>c.id===id)||CATS[5];
 
 let state={cat:'all',sort:'recent',threads:[],nick:'',liked:new Set(),
   view:'feed',thread:null,composeCat:'road',admin:false,user:null,
-  reported:new Set(),reports:[],profile:null,workouts:[],wkType:'무산소',races:[],weights:[],inbody:[],chat:[],aiBusy:false,sub:'dash'};
+  reported:new Set(),reports:[],profile:null,workouts:[],wkType:'무산소',races:[],weights:[],inbody:[],chat:[],aiBusy:false,sub:'dash',
+  voiceChat:[],recog:null,listening:false,speaking:false};
 
 /* ---------- 닉네임/좋아요 = 이 브라우저에만 저장 ---------- */
 function lget(k){try{return localStorage.getItem(k);}catch(e){return null;}}
@@ -1318,6 +1340,9 @@ function switchTab(tab){
   if(isCommunity&&state.view==='detail')closeDetail();
   /* 내 상태 탭이면 현재 선택된 서브탭(대시보드/프로필) 그리기 */
   if(tab==='status')renderSubPane();
+  /* 비서 탭이면 음성 화면 그리기 */
+  if(tab==='assistant')renderVoice();
+  else stopVoice(); /* 다른 탭으로 가면 음성·읽기 중지 */
   window.scrollTo(0,0);
 }
 document.querySelectorAll('.nav-item').forEach(n=>{
@@ -2045,6 +2070,148 @@ function buildAIContext(){
     lines.push("다가오는 대회: "+races.map(r=>`${r.name}(${r.race_date})`).join(', '));
   }
   return lines.join("\n");
+}
+
+/* ===== 음성 비서 ===== */
+function speechSupported(){
+  return !!(window.SpeechRecognition||window.webkitSpeechRecognition);
+}
+function renderVoice(){
+  const wrap=document.getElementById('voiceWrap');
+  if(!wrap)return;
+  if(!state.user){
+    wrap.innerHTML=`
+      <div class="pf-locked">
+        <div class="lk-emoji">🔒</div>
+        <div class="lk-title">로그인이 필요해요</div>
+        <p class="lk-desc">음성 비서는 당신의 기록을 바탕으로 답하기 때문에
+          로그인이 필요해요.</p>
+        <button class="lk-btn" onclick="googleLogin()">구글로 로그인</button>
+      </div>`;
+    return;
+  }
+  if(!speechSupported()){
+    wrap.innerHTML=`
+      <div class="placeholder-page">
+        <div class="pp-emoji">🎙️</div>
+        <div class="pp-title">음성 비서</div>
+        <p class="pp-desc">이 브라우저는 음성 인식을 지원하지 않아요.<br>
+          <b>크롬(Chrome)</b> 브라우저에서 열어주세요.<br>
+          그동안은 '내 상태 → 대시보드'의 글자 채팅을 이용하실 수 있어요.</p>
+      </div>`;
+    return;
+  }
+  const msgs=state.voiceChat.map(m=>
+    `<div class="ai-msg ${m.role}">${m.role==='assistant'?'🤖 ':''}${esc(m.content).replace(/\n/g,'<br>')}</div>`
+  ).join('');
+  wrap.innerHTML=`
+    <div class="voice-screen">
+      <div class="voice-msgs" id="voiceMsgs">${msgs||`
+        <div class="ai-welcome">
+          <div class="ai-w-emoji">🎙️</div>
+          <div class="ai-w-title">마이크를 누르고 말해보세요</div>
+          <div class="ai-w-desc">"오늘 벤치 80kg 다섯 세트 했어"<br>
+            "오늘 컨디션 별로인데 쉬는 게 나을까?"<br>
+            비서가 듣고 답해드려요.</div>
+        </div>`}</div>
+      <div class="voice-status" id="voiceStatus"></div>
+      <button class="mic-btn" id="micBtn" aria-label="말하기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="3" width="6" height="11" rx="3"/>
+          <path d="M5 11a7 7 0 0014 0M12 18v3" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="voice-hint" id="voiceHint">마이크를 누르고 말하세요</div>
+      ${state.voiceChat.length?'<button class="ai-clear" id="voiceClear" style="margin:14px auto 0;display:block">대화 비우기</button>':''}
+      <div class="ai-note" style="margin-top:14px">크롬에서 가장 잘 작동해요 · 답변은 참고용입니다</div>
+    </div>`;
+  const box=document.getElementById('voiceMsgs');
+  if(box)box.scrollTop=box.scrollHeight;
+  document.getElementById('micBtn').onclick=toggleListen;
+  const vc=document.getElementById('voiceClear');
+  if(vc)vc.onclick=()=>{stopVoice();state.voiceChat=[];renderVoice();};
+}
+function setVoiceHint(t){const e=document.getElementById('voiceHint');if(e)e.textContent=t;}
+function setMicState(cls){
+  const b=document.getElementById('micBtn');if(!b)return;
+  b.classList.remove('listening','thinking');
+  if(cls)b.classList.add(cls);
+}
+function toggleListen(){
+  if(state.listening){stopVoice();return;}
+  if(state.speaking){window.speechSynthesis.cancel();state.speaking=false;}
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const recog=new SR();
+  recog.lang='ko-KR';
+  recog.interimResults=true;
+  recog.continuous=false;
+  state.recog=recog;
+  let finalText='';
+  recog.onstart=()=>{state.listening=true;setMicState('listening');setVoiceHint('듣고 있어요... 말씀하세요');};
+  recog.onresult=(e)=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const t=e.results[i][0].transcript;
+      if(e.results[i].isFinal)finalText+=t; else interim+=t;
+    }
+    setVoiceHint((finalText+interim)||'...');
+  };
+  recog.onerror=(e)=>{
+    state.listening=false;setMicState('');
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
+      setVoiceHint('마이크 권한을 허용해주세요');
+    }else{setVoiceHint('다시 한 번 눌러 말해주세요');}
+  };
+  recog.onend=()=>{
+    state.listening=false;setMicState('');
+    const said=finalText.trim();
+    if(said){voiceAsk(said);}
+    else{setVoiceHint('마이크를 누르고 말하세요');}
+  };
+  try{recog.start();}catch(e){setVoiceHint('마이크를 누르고 말하세요');}
+}
+function stopVoice(){
+  if(state.recog){try{state.recog.stop();}catch(e){}state.recog=null;}
+  state.listening=false;
+  if(window.speechSynthesis){window.speechSynthesis.cancel();}
+  state.speaking=false;
+  setMicState('');
+}
+async function voiceAsk(text){
+  state.voiceChat.push({role:'user',content:text});
+  renderVoice();
+  setMicState('thinking');setVoiceHint('비서가 생각하고 있어요...');
+  try{
+    const res=await fetch(`${SUPABASE_URL}/functions/v1/chat`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json',
+        'Authorization':`Bearer ${SUPABASE_KEY}`,'apikey':SUPABASE_KEY},
+      body:JSON.stringify({
+        system:buildAIContext()+"\n\n[음성 대화 모드: 답변은 듣기 편하게 2~4문장으로 짧고 자연스럽게 말하듯이 해주세요.]",
+        messages:state.voiceChat.slice(-10)
+      })
+    });
+    const data=await res.json();
+    const reply=data.reply||'죄송해요, 답변을 받지 못했어요.';
+    state.voiceChat.push({role:'assistant',content:reply});
+    renderVoice();
+    setMicState('');setVoiceHint('마이크를 누르고 말하세요');
+    speak(reply);
+  }catch(e){
+    console.error(e);
+    state.voiceChat.push({role:'assistant',content:'연결에 문제가 생겼어요. 잠시 후 다시 시도해주세요.'});
+    renderVoice();
+    setMicState('');setVoiceHint('마이크를 누르고 말하세요');
+  }
+}
+function speak(text){
+  if(!window.speechSynthesis)return;
+  window.speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang='ko-KR';u.rate=1.05;
+  u.onstart=()=>{state.speaking=true;};
+  u.onend=()=>{state.speaking=false;};
+  window.speechSynthesis.speak(u);
 }
 
 function buildAIChat(){
