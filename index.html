@@ -345,6 +345,52 @@
   .gc-locktitle{font-family:'Bricolage Grotesque';font-weight:800;font-size:18px;
     margin-bottom:8px;}
   .gc-lockdesc{font-size:13px;color:var(--muted);line-height:1.6;max-width:320px;margin:0 auto;}
+
+  /* ===== 내 상태 서브탭 ===== */
+  .sub-tabs{display:flex;gap:6px;padding:14px 18px 0;position:sticky;top:0;z-index:5;
+    background:var(--paper);}
+  .sub-tab{flex:1;padding:12px;border-radius:11px;border:1.5px solid var(--line);
+    background:#fff;font-size:14px;font-weight:800;color:var(--muted);transition:.13s;}
+  .sub-tab.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .sub-pane{display:none;}
+  .sub-pane.on{display:block;}
+
+  /* ===== AI 운동 비서 채팅 ===== */
+  .ai-panel{background:var(--card);border:1px solid var(--line);border-radius:18px;
+    padding:16px;margin-bottom:22px;box-shadow:var(--shadow);}
+  .ai-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .ai-title{font-family:'Bricolage Grotesque';font-weight:800;font-size:16px;}
+  .ai-clear{font-size:11.5px;font-weight:700;color:var(--muted);
+    border:1px solid var(--line);border-radius:999px;padding:4px 11px;transition:.12s;}
+  .ai-clear:hover{background:#FCE9E6;color:#C0392B;border-color:#FCE9E6;}
+  .ai-msgs{max-height:340px;overflow-y:auto;display:flex;flex-direction:column;
+    gap:9px;padding:4px 2px;}
+  .ai-msg{max-width:85%;padding:11px 14px;border-radius:14px;font-size:14px;
+    line-height:1.55;word-break:break-word;}
+  .ai-msg.user{align-self:flex-end;background:var(--ink);color:#fff;
+    border-bottom-right-radius:5px;}
+  .ai-msg.assistant{align-self:flex-start;background:#F0F4F6;color:var(--ink);
+    border-bottom-left-radius:5px;}
+  .ai-welcome{text-align:center;padding:24px 18px;color:var(--muted);}
+  .ai-w-emoji{font-size:36px;margin-bottom:10px;}
+  .ai-w-title{font-family:'Bricolage Grotesque';font-weight:800;font-size:17px;
+    color:var(--ink);margin-bottom:7px;}
+  .ai-w-desc{font-size:13px;line-height:1.7;}
+  .ai-input-row{display:flex;gap:7px;margin-top:12px;align-items:flex-end;}
+  .ai-input-row textarea{flex:1;border:1.5px solid var(--line);border-radius:12px;
+    padding:11px 13px;font-family:inherit;font-size:14px;resize:none;line-height:1.4;
+    max-height:120px;}
+  .ai-input-row textarea:focus{outline:none;border-color:var(--blue);}
+  .ai-send{flex:none;background:var(--blue);color:#fff;border-radius:12px;
+    padding:0 18px;height:44px;font-size:14px;font-weight:800;transition:.13s;}
+  .ai-send:hover{filter:brightness(.94);}
+  .ai-note{font-size:10.5px;color:var(--muted);margin-top:9px;line-height:1.5;text-align:center;}
+  /* 타이핑 점 애니메이션 */
+  .ai-typing span{display:inline-block;width:6px;height:6px;border-radius:50%;
+    background:var(--muted);margin:0 1px;animation:aiblink 1.2s infinite;}
+  .ai-typing span:nth-child(2){animation-delay:.2s;}
+  .ai-typing span:nth-child(3){animation-delay:.4s;}
+  @keyframes aiblink{0%,60%,100%{opacity:.25;}30%{opacity:1;}}
   .clamp{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;}
   .card-actions{display:flex;gap:18px;align-items:center;
     border-top:1px dashed var(--line);padding-top:10px;}
@@ -541,14 +587,32 @@
   </section>
   </div><!-- /tab-community -->
 
-  <!-- ===== 비서 탭 ===== -->
+  <!-- ===== 비서 탭 (음성 전용) ===== -->
   <div class="page on" id="tab-assistant">
-    <div class="wk-wrap" id="wkWrap"></div>
+    <div class="voice-wrap" id="voiceWrap">
+      <div class="placeholder-page">
+        <div class="pp-emoji">🎙️</div>
+        <div class="pp-title">음성 비서</div>
+        <p class="pp-desc">곧 — 말로 비서와 대화할 수 있어요.<br>
+          "오늘 벤치 80kg 다섯 세트 했어"라고 말하면<br>
+          비서가 듣고 답해줍니다.</p>
+        <span class="pp-soon">COMING SOON</span>
+      </div>
+    </div>
   </div>
 
-  <!-- ===== 내 상태 탭 (틀만 — 그래프는 D단계) ===== -->
+  <!-- ===== 내 상태 탭 (대시보드 / 프로필) ===== -->
   <div class="page" id="tab-status">
-    <div class="status-wrap" id="statusWrap"></div>
+    <div class="sub-tabs" id="subTabs">
+      <button class="sub-tab on" data-sub="dash">📊 대시보드</button>
+      <button class="sub-tab" data-sub="profile">👤 프로필</button>
+    </div>
+    <div class="sub-pane on" id="sub-dash">
+      <div class="wk-wrap" id="wkWrap"></div>
+    </div>
+    <div class="sub-pane" id="sub-profile">
+      <div class="status-wrap" id="statusWrap"></div>
+    </div>
   </div>
 </div><!-- /shell -->
 
@@ -611,7 +675,7 @@ const catOf=id=>CATS.find(c=>c.id===id)||CATS[5];
 
 let state={cat:'all',sort:'recent',threads:[],nick:'',liked:new Set(),
   view:'feed',thread:null,composeCat:'road',admin:false,user:null,
-  reported:new Set(),reports:[],profile:null,workouts:[],wkType:'무산소',races:[],weights:[],inbody:[]};
+  reported:new Set(),reports:[],profile:null,workouts:[],wkType:'무산소',races:[],weights:[],inbody:[],chat:[],aiBusy:false,sub:'dash'};
 
 /* ---------- 닉네임/좋아요 = 이 브라우저에만 저장 ---------- */
 function lget(k){try{return localStorage.getItem(k);}catch(e){return null;}}
@@ -1252,15 +1316,31 @@ function switchTab(tab){
   if(isCommunity)paintReportFab(); else document.getElementById('fabReport').style.display='none';
   /* 커뮤니티로 올 땐 상세화면이 아닌 피드부터 */
   if(isCommunity&&state.view==='detail')closeDetail();
-  /* 내 상태 탭이면 프로필 화면 그리기 */
-  if(tab==='status')renderStatus();
-  /* 비서 탭이면 운동 기록 화면 그리기 */
-  if(tab==='assistant')renderAssistant();
+  /* 내 상태 탭이면 현재 선택된 서브탭(대시보드/프로필) 그리기 */
+  if(tab==='status')renderSubPane();
   window.scrollTo(0,0);
 }
 document.querySelectorAll('.nav-item').forEach(n=>{
   n.onclick=()=>switchTab(n.dataset.tab);
 });
+document.querySelectorAll('.sub-tab').forEach(b=>{
+  b.onclick=()=>switchSub(b.dataset.sub);
+});
+
+/* 내 상태 — 서브탭 (대시보드 / 프로필) */
+function switchSub(sub){
+  document.querySelectorAll('.sub-tab').forEach(b=>b.classList.toggle('on',b.dataset.sub===sub));
+  document.querySelectorAll('.sub-pane').forEach(p=>p.classList.remove('on'));
+  document.getElementById('sub-'+sub).classList.add('on');
+  state.sub=sub;
+  renderSubPane();
+  window.scrollTo(0,0);
+}
+function renderSubPane(){
+  const sub=state.sub||'dash';
+  if(sub==='dash')renderAssistant();   /* 대시보드 = 등급+AI채팅+운동기록 */
+  else renderStatus();                  /* 프로필 = 프로필+체중+인바디 */
+}
 
 /* ---------- 내 상태 — 프로필 ---------- */
 const GOALS=[
@@ -1922,6 +2002,151 @@ function buildSummary(){
   </div>`;
 }
 
+/* ===== AI 운동 비서 ===== */
+/* 사용자 데이터를 AI 시스템 지침으로 조립 */
+function buildAIContext(){
+  const p=state.profile||{};
+  const oneRM=w=>w.weight==null?null:Math.round(w.weight*(1+(w.reps||1)/30));
+  const lines=[];
+  lines.push("당신은 'OUSTALETI 운동 비서'입니다. 사용자의 운동을 돕는 친근하고 전문적인 한국어 AI 코치예요.");
+  lines.push("운동생리학·영양학의 일반적으로 받아들여지는 원리에 근거해 조언하되, 확실하지 않으면 단정하지 마세요.");
+  lines.push("답변은 너무 길지 않게, 핵심 위주로. 따뜻하지만 정확하게.");
+  lines.push("의학적 진단·처방은 하지 말고, 통증·부상·건강 이상 신호가 있으면 전문가(의사·트레이너) 상담을 권하세요.");
+  lines.push("---아래는 사용자 정보입니다---");
+  if(p.nickname)lines.push(`닉네임: ${p.nickname}`);
+  const bits=[];
+  if(p.age)bits.push(`나이 ${p.age}`);
+  if(p.sex)bits.push(`성별 ${p.sex}`);
+  if(p.height)bits.push(`키 ${p.height}cm`);
+  if(p.weight)bits.push(`체중 ${p.weight}kg`);
+  if(bits.length)lines.push("신체: "+bits.join(', '));
+  if(p.experience)lines.push(`운동 경력: ${p.experience}`);
+  if(p.goal)lines.push(`목표: ${p.goal}`);
+  if(p.target_weight)lines.push(`목표 체중: ${p.target_weight}kg`);
+  if(p.note)lines.push(`참고사항(주의점 등): ${p.note}`);
+  /* 인바디 */
+  const ib=(state.inbody||[]).slice().sort((a,b)=>a.log_date.localeCompare(b.log_date)).pop();
+  if(ib)lines.push(`최근 인바디: 체지방률 ${ib.body_fat??'-'}%, 골격근량 ${ib.muscle_mass??'-'}kg`);
+  /* 최근 운동 기록 (최대 8개) */
+  const ws=(state.workouts||[]).slice(0,8);
+  if(ws.length){
+    lines.push("최근 운동 기록:");
+    ws.forEach(w=>{
+      if(w.type==='무산소'){
+        lines.push(`- ${w.workout_date} ${w.exercise} ${w.weight??'-'}kg ${w.reps??'-'}회 ${w.sets??'-'}세트 (추정1RM ${oneRM(w)??'-'}kg)`);
+      }else{
+        lines.push(`- ${w.workout_date} ${w.exercise} ${w.distance??'-'}km ${w.duration??'-'}분`);
+      }
+    });
+  }
+  /* 대회 */
+  const races=(state.races||[]).filter(r=>new Date(r.race_date)>=new Date(new Date().toDateString()));
+  if(races.length){
+    lines.push("다가오는 대회: "+races.map(r=>`${r.name}(${r.race_date})`).join(', '));
+  }
+  return lines.join("\n");
+}
+
+function buildAIChat(){
+  const hasData=!!(state.profile&&(state.profile.weight||state.workouts.length));
+  const msgs=state.chat.length?state.chat.map(m=>
+    `<div class="ai-msg ${m.role}">${m.role==='assistant'?'🤖 ':''}${esc(m.content).replace(/\n/g,'<br>')}</div>`
+  ).join(''):`
+    <div class="ai-welcome">
+      <div class="ai-w-emoji">🤖</div>
+      <div class="ai-w-title">무엇이든 물어보세요</div>
+      <div class="ai-w-desc">"오늘 벤치 80kg 10개 5세트 했어, 어때?"<br>
+        "체중 감량 중인데 유산소 얼마나 해야 해?"<br>
+        당신의 기록과 목표를 바탕으로 답해드려요.</div>
+    </div>`;
+  return `
+    <div class="ai-panel">
+      <div class="ai-head">
+        <span class="ai-title">🤖 AI 운동 비서</span>
+        ${state.chat.length?'<button class="ai-clear" id="aiClear">대화 비우기</button>':''}
+      </div>
+      <div class="ai-msgs" id="aiMsgs">${msgs}</div>
+      <div class="ai-input-row">
+        <textarea id="aiInput" rows="1" placeholder="비서에게 물어보세요..."></textarea>
+        <button class="ai-send" id="aiSend">전송</button>
+      </div>
+      <div class="ai-note">AI 답변은 참고용이에요. 통증·부상·건강 이상은 전문가와 상담하세요.</div>
+    </div>`;
+}
+
+async function sendToAI(){
+  if(state.aiBusy)return;
+  const input=document.getElementById('aiInput');
+  const text=input.value.trim();
+  if(!text)return;
+  if(!state.user){openLoginPrompt();return;}
+  /* 사용자 메시지 추가 */
+  state.chat.push({role:'user',content:text});
+  input.value='';
+  state.aiBusy=true;
+  /* 화면 갱신 + 로딩 표시 */
+  rerenderChat(true);
+  try{
+    const res=await fetch(`${SUPABASE_URL}/functions/v1/chat`,{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':`Bearer ${SUPABASE_KEY}`,
+        'apikey':SUPABASE_KEY
+      },
+      body:JSON.stringify({
+        system:buildAIContext(),
+        messages:state.chat.slice(-12) /* 최근 12개만 */
+      })
+    });
+    const data=await res.json();
+    const reply=data.reply||'죄송해요, 답변을 받지 못했어요. 잠시 후 다시 시도해주세요.';
+    state.chat.push({role:'assistant',content:reply});
+  }catch(e){
+    console.error(e);
+    state.chat.push({role:'assistant',content:'연결에 문제가 생겼어요. 잠시 후 다시 시도해주세요.'});
+  }
+  state.aiBusy=false;
+  rerenderChat(true);
+}
+
+/* 채팅 영역만 다시 그리기 (전체 리렌더 없이) */
+function rerenderChat(scroll){
+  const panel=document.querySelector('.ai-panel');
+  if(!panel)return;
+  const msgsBox=document.getElementById('aiMsgs');
+  let html=state.chat.map(m=>
+    `<div class="ai-msg ${m.role}">${m.role==='assistant'?'🤖 ':''}${esc(m.content).replace(/\n/g,'<br>')}</div>`
+  ).join('');
+  if(state.aiBusy)html+=`<div class="ai-msg assistant ai-typing">🤖 <span></span><span></span><span></span></div>`;
+  msgsBox.innerHTML=html;
+  /* 대화 비우기 버튼 토글 */
+  const head=panel.querySelector('.ai-head');
+  if(state.chat.length&&!document.getElementById('aiClear')){
+    head.insertAdjacentHTML('beforeend','<button class="ai-clear" id="aiClear">대화 비우기</button>');
+    document.getElementById('aiClear').onclick=clearChat;
+  }
+  if(scroll)msgsBox.scrollTop=msgsBox.scrollHeight;
+}
+function clearChat(){
+  if(!confirm('대화 내용을 지울까요?'))return;
+  state.chat=[];
+  renderAssistant();
+}
+function wireAIChat(){
+  const send=document.getElementById('aiSend');
+  const input=document.getElementById('aiInput');
+  const clear=document.getElementById('aiClear');
+  if(send)send.onclick=sendToAI;
+  if(input){
+    input.onkeydown=e=>{
+      if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendToAI();}
+    };
+    input.oninput=()=>{input.style.height='auto';input.style.height=Math.min(input.scrollHeight,120)+'px';};
+  }
+  if(clear)clear.onclick=clearChat;
+}
+
 /* 종합 등급 — 표준 기준표 기반 (근력 1RM/체중비 + BMI + 유산소) */
 function buildGradeCard(){
   const p=state.profile||{};
@@ -2125,6 +2350,7 @@ function renderAssistant(){
 
   wrap.innerHTML=`
     ${buildGradeCard()}
+    ${buildAIChat()}
     <div class="st-head">
       <h2>운동 기록</h2>
       <p>오늘 한 운동을 남기면, 비서가 분석할 재료가 쌓여요.</p>
@@ -2156,6 +2382,9 @@ function renderAssistant(){
   });
   document.getElementById('wkAdd').onclick=addWorkout;
   renderWorkoutList();
+  /* AI 채팅 연결 */
+  wireAIChat();
+  if(state.chat.length)rerenderChat(true);
 }
 function renderWorkoutList(){
   const box=document.getElementById('wkList');
@@ -2295,8 +2524,7 @@ document.getElementById('replyPhotoIn').onchange=function(){
     await loadInbody();
     paintNick();
     if(state.view==='detail')renderDetail();else renderFeed();
-    if(document.getElementById('tab-status').classList.contains('on'))renderStatus();
-    if(document.getElementById('tab-assistant').classList.contains('on'))renderAssistant();
+    if(document.getElementById('tab-status').classList.contains('on'))renderSubPane();
   });
 })();
 </script>
