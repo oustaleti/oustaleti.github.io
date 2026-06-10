@@ -489,6 +489,28 @@
     100%{box-shadow:0 0 0 0 rgba(192,57,43,0);}}
   .voice-hint{margin-top:16px;font-size:14px;font-weight:700;color:var(--muted);
     text-align:center;min-height:20px;max-width:90%;line-height:1.5;}
+  /* ===== 주간 바디맵 ===== */
+  .bm-card{width:100%;max-width:480px;background:var(--card);border:1px solid var(--line);
+    border-radius:18px;padding:18px 18px 14px;box-shadow:var(--shadow);text-align:left;}
+  .bm-greet{font-size:15.5px;font-weight:700;line-height:1.55;margin-bottom:14px;}
+  .bm-greet b{color:var(--blue);font-weight:800;}
+  .bm-body{display:flex;gap:14px;align-items:center;}
+  .bm-svg{width:46%;flex:none;}
+  .bm-svg-label{font-size:10px;font-weight:700;fill:#6B7176;font-family:'Pretendard';}
+  .bm-bars{flex:1;display:flex;flex-direction:column;gap:7px;}
+  .bm-bar-row{display:flex;align-items:center;gap:7px;}
+  .bm-bar-name{width:32px;flex:none;font-size:11.5px;font-weight:800;color:var(--muted);}
+  .bm-bar-track{flex:1;height:9px;background:#23282C;border-radius:999px;overflow:hidden;}
+  .bm-bar-fill{height:100%;background:linear-gradient(90deg,var(--blue-d),var(--blue));
+    border-radius:999px;transition:width .4s;}
+  .bm-bar-val{width:42px;flex:none;text-align:right;font-size:11px;font-weight:800;color:var(--ink);}
+  .bm-stats{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
+  .bm-stat{flex:1;min-width:90px;background:var(--card2);border-radius:11px;padding:9px 11px;
+    display:flex;flex-direction:column;gap:2px;}
+  .bm-stat span{font-size:10.5px;font-weight:700;color:var(--muted);}
+  .bm-stat b{font-size:13.5px;font-weight:800;}
+  .bm-stat.warn b{color:#FFAA66;}
+  .bm-note{font-size:10.5px;color:var(--muted);margin-top:10px;line-height:1.5;}
   /* 타이핑 입력 */
   .v-type-row{width:100%;max-width:480px;display:flex;gap:8px;margin-top:18px;align-items:flex-end;}
   .v-type-row textarea{flex:1;border:1.5px solid var(--line);border-radius:12px;
@@ -2330,6 +2352,16 @@ function buildAIContext(){
   lines.push("4) 여러 운동을 한 번에 말하면 핵심 운동 1개만 먼저 태그하고, 나머지는 '○○도 기록할까요?'라고 물어 하나씩 차례로 태그하세요.");
   lines.push("확인 질문은 한 번에 하나만, 짧고 친근하게. 사용자가 이미 명확히 말했다면(예: '푸쉬업 한 세트 20개씩 5세트') 묻지 말고 바로 태그하세요.");
   lines.push("---아래는 사용자 정보입니다---");
+  /* 이번주 부위별 볼륨 — 부위 균형 조언용 */
+  try{
+    const wk=partVolume(7);
+    if(wk.total>0){
+      const parts=ALL_PARTS.map(p=>`${p} ${Math.round(wk.vol[p])}세트`).join(', ');
+      const weak=ALL_PARTS.filter(p=>wk.vol[p]===0);
+      lines.push(`이번주 부위별 운동량: ${parts}`+(weak.length?` (부족: ${weak.join('·')})`:''));
+      lines.push("부위 불균형이 보이면 자연스럽게 균형 조언을 곁들이세요.");
+    }
+  }catch(e){}
   if(p.nickname)lines.push(`닉네임: ${p.nickname}`);
   const bits=[];
   if(p.age)bits.push(`나이 ${p.age}`);
@@ -2416,6 +2448,151 @@ function wireLogCards(){
   });
 }
 
+/* ===== 부위별 운동 분석 (바디맵) ===== */
+/* 운동명 → 부위 매핑. 복합운동은 여러 부위에 분배 (헬스 + 하이록스) */
+const PART_MAP=[
+  /* 어깨 */
+  [['숄더프레스','오버헤드','밀리터리','아놀드','비하인드넥','덤벨숄더','푸시프레스','푸쉬프레스',
+    '레터럴레이즈','사이드레터럴','사이드 레터럴','프론트레이즈','프론트 레이즈','리어델트','리버스플라이',
+    '페이스풀','업라이트로우','슈러그','숄더','lateral','shoulder','ohp'],['어깨']],
+  /* 가슴 */
+  [['벤치','체스트','가슴프레스','플라이','펙덱','케이블크로스','크로스오버','딥스','dips','bench','chest','fly'],['가슴']],
+  /* 등 */
+  [['랫풀','풀다운','풀업','턱걸이','친업','시티드로우','케이블로우','바벨로우','덤벨로우','티바로우','t바','펜들레이',
+    '머신로우','원암로우','벤트오버','백익스텐션','풀오버','로우','row','pullup','chinup','lat'],['등']],
+  /* 데드리프트 계열 = 등+하체 복합 */
+  [['데드리프트','데드','루마니안','rdl','스모','트랩바','헥스바','스티프','deadlift'],['등','하체']],
+  /* 팔 */
+  [['컬','바이셉','이두','해머컬','프리처','케이블컬','스컬크러셔','트라이셉','삼두','푸시다운','푸쉬다운',
+    '킥백','오버헤드익스텐션','클로즈그립','딥벤치','curl','tricep','bicep'],['팔']],
+  /* 하체 */
+  [['스쿼트','레그프레스','핵스쿼트','런지','레그익스텐션','레그컬','카프','힙쓰러스트','힙브릿지','글루트',
+    '불가리안','스텝업','박스점프','점프스쿼트','고블릿','브이스쿼트','squat','lunge','leg','calf','hip'],['하체']],
+  /* 코어 */
+  [['플랭크','크런치','싯업','윗몸','레그레이즈','행잉','러시안트위스트','데드버그','마운틴클라이머','ab휠','앱휠',
+    '토즈투바','할로우','사이드플랭크','plank','crunch','situp','core'],['코어']],
+  /* 하이록스 동작 */
+  [['월볼','wall ball','월 볼'],['하체','어깨']],
+  [['슬레드푸시','슬레드 푸시','썰매밀기','sled push'],['하체']],
+  [['슬레드풀','슬레드 풀','썰매끌기','sled pull'],['등','하체']],
+  [['파머스캐리','파머스 캐리','farmers carry','파머스워크'],['코어','등']],
+  [['샌드백런지','샌드백 런지','sandbag'],['하체','코어']],
+  [['버피','burpee','버피브로드점프'],['가슴','하체','코어']],
+  [['스키에르그','스키 에르그','skierg','스키머신'],['등','팔']],
+  [['로잉','로우머신','rowing','조정'],['등','하체']],
+  [['케틀벨스윙','케틀벨 스윙','kb스윙'],['하체','등']],
+];
+const ALL_PARTS=['어깨','가슴','등','팔','하체','코어'];
+function partsOf(name){
+  const n=(name||'').toLowerCase().replace(/\s/g,'');
+  for(const [keys,parts] of PART_MAP){
+    for(const k of keys){
+      if(n.includes(k.toLowerCase().replace(/\s/g,'')))return parts;
+    }
+  }
+  return null;
+}
+/* 기간 내 부위별 볼륨(세트 수) 집계 */
+function partVolume(days){
+  const now=Date.now();
+  const vol={};ALL_PARTS.forEach(p=>vol[p]=0);
+  let total=0,unknown=0;
+  (state.workouts||[]).forEach(w=>{
+    if(w.type!=='무산소')return;
+    const t=new Date(w.workout_date||w.created_at).getTime();
+    if(days&&(now-t)>days*86400000)return;
+    const parts=partsOf(w.exercise);
+    const sets=Number(w.sets)||1;
+    if(!parts){unknown+=sets;return;}
+    parts.forEach(p=>{vol[p]+=sets/parts.length;});
+    total+=sets;
+  });
+  return {vol,total,unknown};
+}
+/* 부위 강도 → 색 */
+function partColor(v,max){
+  if(!v||max<=0)return '#23282C';
+  const t=Math.min(1,v/max);
+  return `rgba(34,178,224,${(0.3+0.7*t).toFixed(2)})`;
+}
+/* 주간 바디맵 카드 HTML */
+function buildBodyMapCard(){
+  if(!state.user)return '';
+  const wk=partVolume(7);
+  if(wk.total<1)return ''; /* 이번주 기록 없으면 기본 환영문구 유지 */
+  const all=partVolume(0); /* 전체 기간 */
+  const max=Math.max(...ALL_PARTS.map(p=>wk.vol[p]));
+  const c={};ALL_PARTS.forEach(p=>c[p]=partColor(wk.vol[p],max));
+  /* 집중/선호/부족 */
+  const sorted=[...ALL_PARTS].sort((a,b)=>wk.vol[b]-wk.vol[a]);
+  const top=sorted[0];
+  const topShare=wk.total?wk.vol[top]/wk.total:0;
+  const weak=ALL_PARTS.filter(p=>wk.vol[p]===0);
+  const favAll=[...ALL_PARTS].sort((a,b)=>all.vol[b]-all.vol[a])[0];
+  /* 첫인사 조언 (규칙 기반) */
+  let greet;
+  if(topShare>=0.5){
+    greet=`이번주는 <b>${top}</b> 운동에 집중하셨네요 💪`+
+      (weak.length?` <b>${weak.slice(0,2).join('·')}</b>도 챙겨볼까요?`:'');
+  }else if(weak.length>=3){
+    greet=`이번주 ${Math.round(wk.total)}세트! <b>${weak.slice(0,2).join('·')}</b> 운동이 아직 없어요.`;
+  }else{
+    greet=`이번주 ${Math.round(wk.total)}세트 — 부위별로 고르게 잘 하고 계세요 👏`;
+  }
+  /* 부위 막대 (한 일자 기준 위→아래 볼륨 순) */
+  const bars=sorted.map(p=>{
+    const v=wk.vol[p];
+    const w=max>0?Math.round(v/max*100):0;
+    return `<div class="bm-bar-row">
+      <span class="bm-bar-name">${p}</span>
+      <div class="bm-bar-track"><div class="bm-bar-fill" style="width:${w}%;opacity:${v?1:.25}"></div></div>
+      <span class="bm-bar-val">${v?Math.round(v)+'세트':'–'}</span>
+    </div>`;
+  }).join('');
+  /* 앞/뒤 인체 SVG — 부위별 색 */
+  const svg=`
+  <svg class="bm-svg" viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg">
+    <!-- 앞모습 -->
+    <g>
+      <circle cx="55" cy="16" r="9" fill="#3A4147"/>
+      <circle cx="38" cy="34" r="8" fill="${c['어깨']}"/>
+      <circle cx="72" cy="34" r="8" fill="${c['어깨']}"/>
+      <rect x="42" y="30" width="26" height="22" rx="7" fill="${c['가슴']}"/>
+      <rect x="27" y="42" width="9" height="34" rx="4.5" fill="${c['팔']}"/>
+      <rect x="74" y="42" width="9" height="34" rx="4.5" fill="${c['팔']}"/>
+      <rect x="44" y="54" width="22" height="22" rx="6" fill="${c['코어']}"/>
+      <rect x="43" y="79" width="11" height="48" rx="5.5" fill="${c['하체']}"/>
+      <rect x="56" y="79" width="11" height="48" rx="5.5" fill="${c['하체']}"/>
+      <text x="55" y="145" text-anchor="middle" class="bm-svg-label">앞</text>
+    </g>
+    <!-- 뒷모습 -->
+    <g transform="translate(110,0)">
+      <circle cx="55" cy="16" r="9" fill="#3A4147"/>
+      <circle cx="38" cy="34" r="8" fill="${c['어깨']}"/>
+      <circle cx="72" cy="34" r="8" fill="${c['어깨']}"/>
+      <rect x="42" y="30" width="26" height="46" rx="7" fill="${c['등']}"/>
+      <rect x="27" y="42" width="9" height="34" rx="4.5" fill="${c['팔']}"/>
+      <rect x="74" y="42" width="9" height="34" rx="4.5" fill="${c['팔']}"/>
+      <rect x="43" y="79" width="11" height="48" rx="5.5" fill="${c['하체']}"/>
+      <rect x="56" y="79" width="11" height="48" rx="5.5" fill="${c['하체']}"/>
+      <text x="55" y="145" text-anchor="middle" class="bm-svg-label">뒤</text>
+    </g>
+  </svg>`;
+  const statBits=[];
+  statBits.push(`<div class="bm-stat"><span>이번주 집중</span><b>${top}</b></div>`);
+  if(all.total>=10)statBits.push(`<div class="bm-stat"><span>선호 부위</span><b>${favAll}</b></div>`);
+  if(weak.length)statBits.push(`<div class="bm-stat warn"><span>부족</span><b>${weak.slice(0,3).join('·')}</b></div>`);
+  return `<div class="bm-card">
+    <div class="bm-greet">${greet}</div>
+    <div class="bm-body">
+      ${svg}
+      <div class="bm-bars">${bars}</div>
+    </div>
+    <div class="bm-stats">${statBits.join('')}</div>
+    ${wk.unknown>0?`<div class="bm-note">부위 미분류 ${Math.round(wk.unknown)}세트는 집계에서 제외했어요.</div>`:''}
+  </div>`;
+}
+
 /* ===== 음성 비서 ===== */
 function speechSupported(){
   return !!(window.SpeechRecognition||window.webkitSpeechRecognition);
@@ -2445,7 +2622,7 @@ function renderVoice(){
   }).join('');
   wrap.innerHTML=`
     <div class="voice-screen${state.voiceChat.length?' has-chat':''}">
-      <div class="voice-msgs" id="voiceMsgs">${msgs||`
+      <div class="voice-msgs" id="voiceMsgs">${msgs||buildBodyMapCard()||`
         <div class="ai-welcome">
           <div class="ai-w-headline">적는 것도 번거롭습니다.<br>말해서 기록하세요.</div>
           <div class="ai-w-emoji">🎙️</div>
