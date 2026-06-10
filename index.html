@@ -492,6 +492,11 @@
   /* ===== 주간 바디맵 ===== */
   .bm-card{width:100%;max-width:480px;margin:0 auto;background:var(--card);border:1px solid var(--line);
     border-radius:18px;padding:18px 18px 14px;box-shadow:var(--shadow);text-align:left;}
+  .bm-tabs{display:flex;gap:6px;margin-bottom:13px;}
+  .bm-tab{flex:none;padding:5px 13px;border-radius:999px;border:1px solid var(--line);
+    background:transparent;color:var(--muted);font-size:12px;font-weight:800;cursor:pointer;
+    font-family:inherit;transition:all .15s;}
+  .bm-tab.on{background:var(--blue);border-color:var(--blue);color:#fff;}
   .bm-greet{font-size:15.5px;font-weight:700;line-height:1.55;margin-bottom:14px;}
   .bm-greet b{color:var(--blue);font-weight:800;}
   .bm-body{display:flex;gap:14px;align-items:center;}
@@ -2448,7 +2453,7 @@ function wireLogCards(){
         msg.pendingLog=null;
         card.innerHTML='<div class="lc-done">✓ 기록 완료</div>';
         /* 갱신된 바디맵을 대화 안에 바로 보여주기 */
-        const bm=buildBodyMapCard();
+        const bm=buildBodyMapCard('week');
         if(bm){
           const wrap=document.createElement('div');
           wrap.style.margin='12px 0';
@@ -2547,11 +2552,15 @@ function weekStartTs(){
   d.setDate(d.getDate()-((day+6)%7)); /* 가장 가까운 지난 월요일 */
   return d.getTime();
 }
-/* 기간 내 부위별 볼륨 집계 — period: 'week'(이번주 월~일) | 0(전체) */
+/* 오늘 00:00 */
+function dayStartTs(){const d=new Date();d.setHours(0,0,0,0);return d.getTime();}
+/* 이번달 1일 00:00 */
+function monthStartTs(){const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1).getTime();}
+/* 기간 내 부위별 볼륨 집계 — period: 'day'(오늘) | 'week'(월~일) | 'month'(이번달) | 0(전체) */
 function partVolume(period){
   const vol={};ALL_PARTS.forEach(p=>vol[p]=0);
   let total=0,unknown=0;
-  const from=period==='week'?weekStartTs():0;
+  const from=period==='day'?dayStartTs():period==='week'?weekStartTs():period==='month'?monthStartTs():0;
   /* 'YYYY-MM-DD'는 로컬 자정 기준으로 파싱 (UTC 해석 방지) */
   const ts=v=>{
     const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||'');
@@ -2580,45 +2589,60 @@ function partColor(v,max){
   const t=Math.min(1,v/max);
   return `rgba(34,178,224,${(0.3+0.7*t).toFixed(2)})`;
 }
-/* 주간 바디맵 카드 HTML */
-function buildBodyMapCard(){
+/* 바디맵 카드 HTML — period: 'day'|'week'|'month' (기본 'week') */
+const BM_LABEL={day:'오늘',week:'이번주',month:'이번달'};
+function buildBodyMapCard(period){
   if(!state.user)return '';
-  const wk=partVolume('week');
-  if(wk.total<1){
-    /* 분류된 운동은 없지만 기록 자체는 있는 경우 → 최소 카드 표시 */
-    if(wk.unknown>0)return `<div class="bm-card">
-      <div class="bm-greet">이번주 ${Math.round(wk.unknown)}세트 기록 💪</div>
+  const initial=!period; period=period||'week';
+  const v=partVolume(period);
+  const label=BM_LABEL[period];
+  /* 첫 화면(기본 이번주)에 분류된 기록이 없으면 → 환영문구/최소 카드 */
+  if(initial&&v.total<1){
+    if(v.unknown>0)return `<div class="bm-card">
+      <div class="bm-greet">이번주 ${Math.round(v.unknown)}세트 기록 💪</div>
       <div class="bm-note">부위를 인식하지 못한 운동이라 바디맵 분석은 생략했어요.</div>
     </div>`;
     return ''; /* 이번주 기록 없으면 기본 환영문구 유지 */
   }
+  /* 기간 전환 탭 */
+  const tabs=`<div class="bm-tabs">${['day','week','month'].map(p=>
+    `<button class="bm-tab${p===period?' on':''}" onclick="bmSetPeriod(this,'${p}')">${BM_LABEL[p]}</button>`
+  ).join('')}</div>`;
+  /* 탭으로 전환했는데 해당 기간 기록이 없는 경우 → 빈 상태 카드 */
+  if(v.total<1){
+    return `<div class="bm-card">
+      ${tabs}
+      <div class="bm-greet">${label}은 아직 기록이 없어요</div>
+      <div class="bm-note">운동을 기록하면 ${label} 바디맵이 채워집니다.${v.unknown>0?` (부위 미분류 ${Math.round(v.unknown)}세트 제외)`:''}</div>
+    </div>`;
+  }
   const all=partVolume(0); /* 전체 기간 */
-  const max=Math.max(...ALL_PARTS.map(p=>wk.vol[p]));
-  const c={};ALL_PARTS.forEach(p=>c[p]=partColor(wk.vol[p],max));
+  const max=Math.max(...ALL_PARTS.map(p=>v.vol[p]));
+  const c={};ALL_PARTS.forEach(p=>c[p]=partColor(v.vol[p],max));
   /* 집중/선호/부족 */
-  const sorted=[...ALL_PARTS].sort((a,b)=>wk.vol[b]-wk.vol[a]);
+  const sorted=[...ALL_PARTS].sort((a,b)=>v.vol[b]-v.vol[a]);
   const top=sorted[0];
-  const topShare=wk.total?wk.vol[top]/wk.total:0;
-  const weak=ALL_PARTS.filter(p=>wk.vol[p]===0);
+  const topShare=v.total?v.vol[top]/v.total:0;
+  const weak=ALL_PARTS.filter(p=>v.vol[p]===0);
   const favAll=[...ALL_PARTS].sort((a,b)=>all.vol[b]-all.vol[a])[0];
   /* 첫인사 조언 (규칙 기반) */
   let greet;
   if(topShare>=0.5){
-    greet=`이번주는 <b>${top}</b> 운동에 집중하셨네요 💪`+
+    greet=`${label}은 <b>${top}</b> 운동에 집중하셨네요 💪`+
       (weak.length?` <b>${weak.slice(0,2).join('·')}</b>도 챙겨볼까요?`:'');
   }else if(weak.length>=3){
-    greet=`이번주 ${Math.round(wk.total)}세트! <b>${weak.slice(0,2).join('·')}</b> 운동이 아직 없어요.`;
+    greet=`${label} ${Math.round(v.total)}세트! <b>${weak.slice(0,2).join('·')}</b> 운동이 아직 없어요.`;
   }else{
-    greet=`이번주 ${Math.round(wk.total)}세트 — 부위별로 고르게 잘 하고 계세요 👏`;
+    greet=`${label} ${Math.round(v.total)}세트 — 부위별로 고르게 잘 하고 계세요 👏`;
   }
-  /* 부위 막대 (한 일자 기준 위→아래 볼륨 순) */
+  /* 부위 막대 (볼륨 순) */
   const bars=sorted.map(p=>{
-    const v=wk.vol[p];
-    const w=max>0?Math.round(v/max*100):0;
+    const val=v.vol[p];
+    const w=max>0?Math.round(val/max*100):0;
     return `<div class="bm-bar-row">
       <span class="bm-bar-name">${p}</span>
-      <div class="bm-bar-track"><div class="bm-bar-fill" style="width:${w}%;opacity:${v?1:.25}"></div></div>
-      <span class="bm-bar-val">${v?Math.round(v)+'세트':'–'}</span>
+      <div class="bm-bar-track"><div class="bm-bar-fill" style="width:${w}%;opacity:${val?1:.25}"></div></div>
+      <span class="bm-bar-val">${val?Math.round(val)+'세트':'–'}</span>
     </div>`;
   }).join('');
   /* 앞/뒤 인체 SVG — 부위별 색 */
@@ -2651,19 +2675,28 @@ function buildBodyMapCard(){
     </g>
   </svg>`;
   const statBits=[];
-  statBits.push(`<div class="bm-stat"><span>이번주 집중</span><b>${top}</b></div>`);
+  statBits.push(`<div class="bm-stat"><span>${label} 집중</span><b>${top}</b></div>`);
   if(all.total>=10)statBits.push(`<div class="bm-stat"><span>선호 부위</span><b>${favAll}</b></div>`);
   if(weak.length)statBits.push(`<div class="bm-stat warn"><span>부족</span><b>${weak.slice(0,3).join('·')}</b></div>`);
   return `<div class="bm-card">
+    ${tabs}
     <div class="bm-greet">${greet}</div>
     <div class="bm-body">
       ${svg}
       <div class="bm-bars">${bars}</div>
     </div>
     <div class="bm-stats">${statBits.join('')}</div>
-    ${wk.unknown>0?`<div class="bm-note">부위 미분류 ${Math.round(wk.unknown)}세트는 집계에서 제외했어요.</div>`:''}
+    ${v.unknown>0?`<div class="bm-note">부위 미분류 ${Math.round(v.unknown)}세트는 집계에서 제외했어요.</div>`:''}
   </div>`;
 }
+/* 바디맵 기간 전환 (탭 onclick) */
+window.bmSetPeriod=function(el,p){
+  const card=el.closest('.bm-card');
+  if(!card)return;
+  const tmp=document.createElement('div');
+  tmp.innerHTML=buildBodyMapCard(p);
+  if(tmp.firstElementChild)card.replaceWith(tmp.firstElementChild);
+};
 
 /* ===== 음성 비서 ===== */
 function speechSupported(){
