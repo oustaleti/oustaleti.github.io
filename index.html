@@ -2447,6 +2447,15 @@ function wireLogCards(){
       if(ok){
         msg.pendingLog=null;
         card.innerHTML='<div class="lc-done">✓ 기록 완료</div>';
+        /* 갱신된 바디맵을 대화 안에 바로 보여주기 */
+        const bm=buildBodyMapCard();
+        if(bm){
+          const wrap=document.createElement('div');
+          wrap.style.margin='12px 0';
+          wrap.innerHTML=bm;
+          card.insertAdjacentElement('afterend',wrap);
+          wrap.scrollIntoView({behavior:'smooth',block:'nearest'});
+        }
       }
     };
     card.querySelector('.lc-no').onclick=()=>{
@@ -2493,6 +2502,35 @@ const PART_MAP=[
   [['케틀벨스윙','케틀벨 스윙','kb스윙'],['하체','등']],
 ];
 const ALL_PARTS=['어깨','가슴','등','팔','하체','코어'];
+/* 유산소 종목 → 부위 매핑 */
+const CARDIO_PART_MAP=[
+  [['사이클','싸이클','자전거','라이딩','cycle','bike','cycling','로드','mtb','즈위프트','zwift','평로라','스마트로라'],['하체']],
+  [['러닝','달리기','조깅','마라톤','트레일','run','jog'],['하체']],
+  [['축구','풋살','족구'],['하체']],
+  [['농구','배구','테니스','배드민턴','스쿼시','탁구'],['하체']],
+  [['등산','하이킹','트레킹','hiking','계단'],['하체']],
+  [['걷기','산책','워킹','walking'],['하체']],
+  [['줄넘기','jump rope'],['하체','코어']],
+  [['수영','swim'],['어깨','등']],
+  [['클라이밍','볼더링','climbing'],['등','팔']],
+];
+function cardioPartsOf(name){
+  const n=(name||'').toLowerCase().replace(/\s/g,'');
+  for(const [keys,parts] of CARDIO_PART_MAP){
+    for(const k of keys){
+      if(n.includes(k.toLowerCase().replace(/\s/g,'')))return parts;
+    }
+  }
+  return ['하체']; /* 미분류 유산소도 기본적으로 하체 부하로 간주 */
+}
+/* 유산소 1회 → 환산 볼륨: 30분당 1단위 (최소 1, 최대 6) */
+function cardioUnits(w){
+  const min=Number(w.duration)||0;
+  if(min>0)return Math.min(6,Math.max(1,Math.round(min/30)));
+  const km=Number(w.distance)||0;
+  if(km>0)return Math.min(6,Math.max(1,Math.round(km/8))); /* 시간 없으면 거리 기준 대략 환산 */
+  return 1;
+}
 function partsOf(name){
   const n=(name||'').toLowerCase().replace(/\s/g,'');
   for(const [keys,parts] of PART_MAP){
@@ -2508,14 +2546,19 @@ function partVolume(days){
   const vol={};ALL_PARTS.forEach(p=>vol[p]=0);
   let total=0,unknown=0;
   (state.workouts||[]).forEach(w=>{
-    if(w.type!=='무산소')return;
     const t=new Date(w.workout_date||w.created_at).getTime();
     if(days&&(now-t)>days*86400000)return;
-    const parts=partsOf(w.exercise);
-    const sets=Number(w.sets)||1;
-    if(!parts){unknown+=sets;return;}
-    parts.forEach(p=>{vol[p]+=sets/parts.length;});
-    total+=sets;
+    let parts,units;
+    if(w.type==='유산소'){
+      parts=cardioPartsOf(w.exercise);
+      units=cardioUnits(w);
+    }else if(w.type==='무산소'){
+      parts=partsOf(w.exercise);
+      units=Number(w.sets)||1;
+      if(!parts){unknown+=units;return;}
+    }else return;
+    parts.forEach(p=>{vol[p]+=units/parts.length;});
+    total+=units;
   });
   return {vol,total,unknown};
 }
@@ -2661,7 +2704,7 @@ function renderVoice(){
         <textarea id="vInput" rows="1" placeholder="또는, 여기에 타이핑하세요"></textarea>
         <button class="v-send" id="vSend">전송</button>
       </div>
-      ${state.voiceChat.length?'<button class="ai-clear" id="voiceClear" style="margin:14px auto 0;display:block">대화 비우기</button>':''}
+      ${state.voiceChat.length?'<button class="ai-clear" id="voiceClear" style="margin:14px auto 0;display:block">⌂ 첫화면으로 돌아가기</button>':''}
       <div class="ai-note" style="margin-top:14px">크롬에서 가장 잘 작동해요 · 답변은 참고용입니다</div>
     </div>`;
   const box=document.getElementById('voiceMsgs');
