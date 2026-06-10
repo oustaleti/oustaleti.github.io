@@ -492,8 +492,9 @@
   /* ===== 주간 바디맵 ===== */
   .bm-card{width:100%;max-width:480px;margin:0 auto;background:var(--card);border:1px solid var(--line);
     border-radius:18px;padding:18px 18px 14px;box-shadow:var(--shadow);text-align:left;}
-  .bm-tabs{display:flex;gap:6px;margin-bottom:13px;}
-  .bm-tab{flex:none;padding:5px 13px;border-radius:999px;border:1px solid var(--line);
+  .bm-tabs{display:flex;gap:6px;margin-bottom:13px;overflow-x:auto;scrollbar-width:none;}
+  .bm-tabs::-webkit-scrollbar{display:none;}
+  .bm-tab{flex:none;padding:5px 12px;border-radius:999px;border:1px solid var(--line);
     background:transparent;color:var(--muted);font-size:12px;font-weight:800;cursor:pointer;
     font-family:inherit;transition:all .15s;}
   .bm-tab.on{background:var(--blue);border-color:var(--blue);color:#fff;}
@@ -502,13 +503,20 @@
   .bm-body{display:flex;gap:14px;align-items:center;}
   .bm-svg{width:46%;flex:none;}
   .bm-svg-label{font-size:10px;font-weight:700;fill:#6B7176;font-family:'Pretendard';}
-  .bm-bars{flex:1;display:flex;flex-direction:column;gap:7px;}
+  .bm-bars{flex:1;display:flex;flex-direction:column;gap:8px;}
   .bm-bar-row{display:flex;align-items:center;gap:7px;}
   .bm-bar-name{width:32px;flex:none;font-size:11.5px;font-weight:800;color:var(--muted);}
-  .bm-bar-track{flex:1;height:9px;background:#23282C;border-radius:999px;overflow:hidden;}
+  .bm-bar-track{flex:1;height:11px;background:#23282C;border-radius:999px;overflow:hidden;position:relative;}
+  /* 20% 간격 눈금선 */
+  .bm-bar-track::after{content:'';position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(90deg,
+      transparent 0,transparent calc(20% - 1px),
+      rgba(255,255,255,.09) calc(20% - 1px),rgba(255,255,255,.09) 20%);}
   .bm-bar-fill{height:100%;background:linear-gradient(90deg,var(--blue-d),var(--blue));
     border-radius:999px;transition:width .4s;}
-  .bm-bar-val{width:42px;flex:none;text-align:right;font-size:11px;font-weight:800;color:var(--ink);}
+  .bm-bar-val{width:52px;flex:none;text-align:right;font-size:11px;font-weight:800;color:var(--ink);
+    display:flex;flex-direction:column;align-items:flex-end;line-height:1.25;}
+  .bm-bar-val em{font-style:normal;font-size:9.5px;font-weight:700;color:var(--muted);}
   .bm-stats{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
   .bm-stat{flex:1;min-width:90px;background:var(--card2);border-radius:11px;padding:9px 11px;
     display:flex;flex-direction:column;gap:2px;}
@@ -2453,7 +2461,7 @@ function wireLogCards(){
         msg.pendingLog=null;
         card.innerHTML='<div class="lc-done">✓ 기록 완료</div>';
         /* 갱신된 바디맵을 대화 안에 바로 보여주기 */
-        const bm=buildBodyMapCard('week');
+        const bm=buildBodyMapCard('d30');
         if(bm){
           const wrap=document.createElement('div');
           wrap.style.margin='12px 0';
@@ -2556,11 +2564,16 @@ function weekStartTs(){
 function dayStartTs(){const d=new Date();d.setHours(0,0,0,0);return d.getTime();}
 /* 이번달 1일 00:00 */
 function monthStartTs(){const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1).getTime();}
-/* 기간 내 부위별 볼륨 집계 — period: 'day'(오늘) | 'week'(월~일) | 'month'(이번달) | 0(전체) */
+/* 기간 내 부위별 볼륨 집계 — period: 'day' | 'week'(월~일) | 'month' | 'd7'(최근 7일) | 'd30'(최근 30일) | 0(전체) */
 function partVolume(period){
   const vol={};ALL_PARTS.forEach(p=>vol[p]=0);
   let total=0,unknown=0;
-  const from=period==='day'?dayStartTs():period==='week'?weekStartTs():period==='month'?monthStartTs():0;
+  const from=period==='day'?dayStartTs()
+    :period==='week'?weekStartTs()
+    :period==='month'?monthStartTs()
+    :period==='d7'?dayStartTs()-6*86400000
+    :period==='d30'?dayStartTs()-29*86400000
+    :0;
   /* 'YYYY-MM-DD'는 로컬 자정 기준으로 파싱 (UTC 해석 방지) */
   const ts=v=>{
     const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||'');
@@ -2589,24 +2602,26 @@ function partColor(v,max){
   const t=Math.min(1,v/max);
   return `rgba(34,178,224,${(0.3+0.7*t).toFixed(2)})`;
 }
-/* 바디맵 카드 HTML — period: 'day'|'week'|'month' (기본 'week') */
-const BM_LABEL={day:'오늘',week:'이번주',month:'이번달'};
+/* 바디맵 카드 HTML — period: 'day'|'d7'|'week'|'d30'|'month' (기본 'd30') */
+const BM_LABEL={day:'오늘',d7:'최근 7일',week:'이번주',d30:'최근 30일',month:'이번달'};
+const BM_TAB={day:'오늘',d7:'7일',week:'이번주',d30:'30일',month:'이번달'};
+const BM_ORDER=['day','week','month','d7','d30'];
 function buildBodyMapCard(period){
   if(!state.user)return '';
-  const initial=!period; period=period||'week';
+  const initial=!period; period=period||'d30';
   const v=partVolume(period);
   const label=BM_LABEL[period];
-  /* 첫 화면(기본 이번주)에 분류된 기록이 없으면 → 환영문구/최소 카드 */
+  /* 첫 화면(기본 최근 30일)에 분류된 기록이 없으면 → 환영문구/최소 카드 */
   if(initial&&v.total<1){
     if(v.unknown>0)return `<div class="bm-card">
-      <div class="bm-greet">이번주 ${Math.round(v.unknown)}세트 기록 💪</div>
+      <div class="bm-greet">최근 30일 ${Math.round(v.unknown)}세트 기록 💪</div>
       <div class="bm-note">부위를 인식하지 못한 운동이라 바디맵 분석은 생략했어요.</div>
     </div>`;
-    return ''; /* 이번주 기록 없으면 기본 환영문구 유지 */
+    return ''; /* 기록 없으면 기본 환영문구 유지 */
   }
   /* 기간 전환 탭 */
-  const tabs=`<div class="bm-tabs">${['day','week','month'].map(p=>
-    `<button class="bm-tab${p===period?' on':''}" onclick="bmSetPeriod(this,'${p}')">${BM_LABEL[p]}</button>`
+  const tabs=`<div class="bm-tabs">${BM_ORDER.map(p=>
+    `<button class="bm-tab${p===period?' on':''}" onclick="bmSetPeriod(this,'${p}')">${BM_TAB[p]}</button>`
   ).join('')}</div>`;
   /* 탭으로 전환했는데 해당 기간 기록이 없는 경우 → 빈 상태 카드 */
   if(v.total<1){
@@ -2635,14 +2650,16 @@ function buildBodyMapCard(period){
   }else{
     greet=`${label} ${Math.round(v.total)}세트 — 부위별로 고르게 잘 하고 계세요 👏`;
   }
-  /* 부위 막대 (볼륨 순) */
+  /* 부위 막대 (볼륨 순) — 소수점·비중 표시로 세분화 */
+  const fmtV=n=>n%1?n.toFixed(1):String(Math.round(n));
   const bars=sorted.map(p=>{
     const val=v.vol[p];
-    const w=max>0?Math.round(val/max*100):0;
+    const w=max>0?Math.round(val/max*1000)/10:0;
+    const share=v.total?Math.round(val/v.total*100):0;
     return `<div class="bm-bar-row">
       <span class="bm-bar-name">${p}</span>
       <div class="bm-bar-track"><div class="bm-bar-fill" style="width:${w}%;opacity:${val?1:.25}"></div></div>
-      <span class="bm-bar-val">${val?Math.round(val)+'세트':'–'}</span>
+      <span class="bm-bar-val">${val?`${fmtV(val)}세트<em>${share}%</em>`:'–'}</span>
     </div>`;
   }).join('');
   /* 앞/뒤 인체 SVG — 부위별 색 */
