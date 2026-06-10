@@ -2442,6 +2442,11 @@ function extractWorkoutLog(reply){
   if(log)log.label=label;
   return {clean,log};
 }
+/* 사용자가 즉시 기록을 지시했는지 ('기록해줘', '바로 기록해', 끝맺는 '기록' 등) */
+function wantsAutoSave(text){
+  const n=(text||'').replace(/\s/g,'');
+  return /기록해|저장해|등록해/.test(n)||/기록[!.~]*$/.test(n);
+}
 /* 운동 감지 시 "기록할까요?" 확인 카드 HTML */
 function logConfirmCard(log,where,idx){
   if(!log)return '';
@@ -2750,6 +2755,10 @@ function renderVoice(){
     if(m.pendingLog){
       html+=logConfirmCard(m.pendingLog,'voice',i);
     }
+    if(m.autoSaved){
+      html+=`<div class="log-confirm"><div class="lc-label">${esc(m.autoSaved)}</div><div class="lc-done">✓ 기록 완료</div></div>`;
+      if(i===state.voiceChat.length-1)html+=`<div style="margin:12px 0">${buildBodyMapCard('d30')}</div>`;
+    }
     return html;
   }).join('');
   wrap.innerHTML=`
@@ -2859,7 +2868,13 @@ async function voiceAsk(text,speakReply=true){
       state.voiceChat.slice(-10));
     if(!raw)throw new Error('empty reply');
     const {clean,log}=extractWorkoutLog(raw);
-    state.voiceChat.push({role:'assistant',content:clean,pendingLog:log});
+    /* '기록해줘' 등 지시어가 있으면 확인 카드 없이 바로 저장 */
+    let autoSaved=null;
+    if(log&&wantsAutoSave(text)){
+      const ok=await saveDetectedWorkout(log);
+      if(ok)autoSaved=log.label||'운동';
+    }
+    state.voiceChat.push({role:'assistant',content:clean,pendingLog:autoSaved?null:log,autoSaved});
     renderVoice();
     setMicState('');setVoiceHint(VOICE_HINT_DEFAULT);
     if(speakReply)speak(clean); /* 타이핑 질문이면 소리 없이 글로만 */
@@ -2923,7 +2938,12 @@ async function sendToAI(){
     const raw=await callChat(buildAIContext(),state.chat.slice(-12));
     if(!raw)throw new Error('empty reply');
     const {clean,log}=extractWorkoutLog(raw);
-    state.chat.push({role:'assistant',content:clean,pendingLog:log});
+    let autoSaved=null;
+    if(log&&wantsAutoSave(text)){
+      const ok=await saveDetectedWorkout(log);
+      if(ok)autoSaved=log.label||'운동';
+    }
+    state.chat.push({role:'assistant',content:clean,pendingLog:autoSaved?null:log,autoSaved});
   }catch(e){
     console.error(e);
     state.chat.push({role:'assistant',content:'연결에 문제가 생겼어요. 잠시 후 다시 시도해주세요.'});
@@ -2940,6 +2960,7 @@ function rerenderChat(scroll){
   let html=state.chat.map((m,i)=>{
     let h=`<div class="ai-msg ${m.role}">${m.role==='assistant'?'🤖 ':''}${esc(m.content).replace(/\n/g,'<br>')}</div>`;
     if(m.pendingLog)h+=logConfirmCard(m.pendingLog,'text',i);
+    if(m.autoSaved)h+=`<div class="log-confirm"><div class="lc-label">${esc(m.autoSaved)}</div><div class="lc-done">✓ 기록 완료</div></div>`;
     return h;
   }).join('');
   if(state.aiBusy)html+=`<div class="ai-msg assistant ai-typing">🤖 <span></span><span></span><span></span></div>`;
