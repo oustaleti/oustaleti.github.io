@@ -488,9 +488,9 @@
     70%{box-shadow:0 0 0 22px rgba(192,57,43,0);}
     100%{box-shadow:0 0 0 0 rgba(192,57,43,0);}}
   .voice-hint{margin-top:16px;font-size:14px;font-weight:700;color:var(--muted);
-    text-align:center;min-height:20px;max-width:90%;line-height:1.5;}
+    text-align:center;min-height:20px;max-width:90%;line-height:1.6;white-space:pre-line;}
   /* ===== 주간 바디맵 ===== */
-  .bm-card{width:100%;max-width:480px;background:var(--card);border:1px solid var(--line);
+  .bm-card{width:100%;max-width:480px;margin:0 auto;background:var(--card);border:1px solid var(--line);
     border-radius:18px;padding:18px 18px 14px;box-shadow:var(--shadow);text-align:left;}
   .bm-greet{font-size:15.5px;font-weight:700;line-height:1.55;margin-bottom:14px;}
   .bm-greet b{color:var(--blue);font-weight:800;}
@@ -2648,7 +2648,7 @@ function renderVoice(){
           <path d="M5 11a7 7 0 0014 0M12 18v3" stroke-linecap="round"/>
         </svg>
       </button>
-      <div class="voice-hint" id="voiceHint">${sup?'마이크를 누르고 말하세요':'이 브라우저는 음성 미지원 — 아래에 타이핑하세요'}</div>
+      <div class="voice-hint" id="voiceHint">${sup?VOICE_HINT_DEFAULT:'이 브라우저는 음성 미지원 — 아래에 타이핑하세요'}</div>
       <div class="v-type-row">
         <textarea id="vInput" rows="1" placeholder="또는, 여기에 타이핑하세요"></textarea>
         <button class="v-send" id="vSend">전송</button>
@@ -2679,6 +2679,7 @@ function renderVoice(){
   const vc=document.getElementById('voiceClear');
   if(vc)vc.onclick=()=>{stopVoice();state.voiceChat=[];renderVoice();};
 }
+const VOICE_HINT_DEFAULT='오늘 수행한 운동을 음성이나 타이핑으로 전달하면,\n당신의 운동 비서가 기록을 저장하고, 데이터를 산출합니다.';
 function setVoiceHint(t){const e=document.getElementById('voiceHint');if(e)e.textContent=t;}
 function setMicState(cls){
   const b=document.getElementById('micBtn');if(!b)return;
@@ -2714,9 +2715,9 @@ function toggleListen(){
     state.listening=false;setMicState('');
     const said=finalText.trim();
     if(said){voiceAsk(said);}
-    else{setVoiceHint('마이크를 누르고 말하세요');}
+    else{setVoiceHint(VOICE_HINT_DEFAULT);}
   };
-  try{recog.start();}catch(e){setVoiceHint('마이크를 누르고 말하세요');}
+  try{recog.start();}catch(e){setVoiceHint(VOICE_HINT_DEFAULT);}
 }
 function stopVoice(){
   if(state.recog){try{state.recog.stop();}catch(e){}state.recog=null;}
@@ -2737,13 +2738,13 @@ async function voiceAsk(text,speakReply=true){
     const {clean,log}=extractWorkoutLog(raw);
     state.voiceChat.push({role:'assistant',content:clean,pendingLog:log});
     renderVoice();
-    setMicState('');setVoiceHint('마이크를 누르고 말하세요');
+    setMicState('');setVoiceHint(VOICE_HINT_DEFAULT);
     if(speakReply)speak(clean); /* 타이핑 질문이면 소리 없이 글로만 */
   }catch(e){
     console.error(e);
     state.voiceChat.push({role:'assistant',content:'연결에 문제가 생겼어요. 잠시 후 다시 시도해주세요.'});
     renderVoice();
-    setMicState('');setVoiceHint('마이크를 누르고 말하세요');
+    setMicState('');setVoiceHint(VOICE_HINT_DEFAULT);
   }
 }
 function speak(text){
