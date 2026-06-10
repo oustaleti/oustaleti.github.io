@@ -2356,7 +2356,7 @@ function buildAIContext(){
   lines.push("---아래는 사용자 정보입니다---");
   /* 이번주 부위별 볼륨 — 부위 균형 조언용 */
   try{
-    const wk=partVolume(7);
+    const wk=partVolume('week');
     if(wk.total>0){
       const parts=ALL_PARTS.map(p=>`${p} ${Math.round(wk.vol[p])}세트`).join(', ');
       const weak=ALL_PARTS.filter(p=>wk.vol[p]===0);
@@ -2540,14 +2540,26 @@ function partsOf(name){
   }
   return null;
 }
-/* 기간 내 부위별 볼륨(세트 수) 집계 */
-function partVolume(days){
-  const now=Date.now();
+/* 이번주 시작(월요일 00:00) 타임스탬프 */
+function weekStartTs(){
+  const d=new Date();d.setHours(0,0,0,0);
+  const day=d.getDay(); /* 일=0, 월=1 ... */
+  d.setDate(d.getDate()-((day+6)%7)); /* 가장 가까운 지난 월요일 */
+  return d.getTime();
+}
+/* 기간 내 부위별 볼륨 집계 — period: 'week'(이번주 월~일) | 0(전체) */
+function partVolume(period){
   const vol={};ALL_PARTS.forEach(p=>vol[p]=0);
   let total=0,unknown=0;
+  const from=period==='week'?weekStartTs():0;
+  /* 'YYYY-MM-DD'는 로컬 자정 기준으로 파싱 (UTC 해석 방지) */
+  const ts=v=>{
+    const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||'');
+    return m?new Date(+m[1],+m[2]-1,+m[3]).getTime():new Date(v).getTime();
+  };
   (state.workouts||[]).forEach(w=>{
-    const t=new Date(w.workout_date||w.created_at).getTime();
-    if(days&&(now-t)>days*86400000)return;
+    const t=ts(w.workout_date||w.created_at);
+    if(from&&t<from)return;
     let parts,units;
     if(w.type==='유산소'){
       parts=cardioPartsOf(w.exercise);
@@ -2571,7 +2583,7 @@ function partColor(v,max){
 /* 주간 바디맵 카드 HTML */
 function buildBodyMapCard(){
   if(!state.user)return '';
-  const wk=partVolume(7);
+  const wk=partVolume('week');
   if(wk.total<1){
     /* 분류된 운동은 없지만 기록 자체는 있는 경우 → 최소 카드 표시 */
     if(wk.unknown>0)return `<div class="bm-card">
