@@ -2289,6 +2289,24 @@ function buildSummary(){
 }
 
 /* ===== AI 운동 비서 ===== */
+/* 공통 AI 호출 — 빈 응답이나 실패 시 1회 자동 재시도 */
+async function callChat(system,messages){
+  for(let attempt=0;attempt<2;attempt++){
+    try{
+      const res=await fetch(`${SUPABASE_URL}/functions/v1/chat`,{
+        method:'POST',
+        headers:{'Content-Type':'application/json',
+          'Authorization':`Bearer ${SUPABASE_KEY}`,'apikey':SUPABASE_KEY},
+        body:JSON.stringify({system,messages})
+      });
+      const data=await res.json();
+      const reply=(data.reply||'').trim();
+      /* 정상 답변이면 반환, 빈/실패 문구면 한 번 더 시도 */
+      if(reply&&!/답변을 만들지 못했|답변을 받지 못했/.test(reply))return reply;
+    }catch(e){ console.error('chat 시도 '+(attempt+1)+' 실패',e); }
+  }
+  return null;
+}
 /* 사용자 데이터를 AI 시스템 지침으로 조립 */
 function buildAIContext(){
   const p=state.profile||{};
@@ -2526,17 +2544,10 @@ async function voiceAsk(text,speakReply=true){
   renderVoice();
   setMicState('thinking');setVoiceHint('비서가 생각하고 있어요...');
   try{
-    const res=await fetch(`${SUPABASE_URL}/functions/v1/chat`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json',
-        'Authorization':`Bearer ${SUPABASE_KEY}`,'apikey':SUPABASE_KEY},
-      body:JSON.stringify({
-        system:buildAIContext()+"\n\n[음성 대화 모드: 답변은 듣기 편하게 2~4문장으로 짧고 자연스럽게 말하듯이 해주세요.]",
-        messages:state.voiceChat.slice(-10)
-      })
-    });
-    const data=await res.json();
-    const raw=data.reply||'죄송해요, 답변을 받지 못했어요.';
+    const raw=await callChat(
+      buildAIContext()+"\n\n[음성 대화 모드: 답변은 듣기 편하게 2~4문장으로 짧고 자연스럽게 말하듯이 해주세요.]",
+      state.voiceChat.slice(-10));
+    if(!raw)throw new Error('empty reply');
     const {clean,log}=extractWorkoutLog(raw);
     state.voiceChat.push({role:'assistant',content:clean,pendingLog:log});
     renderVoice();
@@ -2599,20 +2610,8 @@ async function sendToAI(){
   /* 화면 갱신 + 로딩 표시 */
   rerenderChat(true);
   try{
-    const res=await fetch(`${SUPABASE_URL}/functions/v1/chat`,{
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'Authorization':`Bearer ${SUPABASE_KEY}`,
-        'apikey':SUPABASE_KEY
-      },
-      body:JSON.stringify({
-        system:buildAIContext(),
-        messages:state.chat.slice(-12) /* 최근 12개만 */
-      })
-    });
-    const data=await res.json();
-    const raw=data.reply||'죄송해요, 답변을 받지 못했어요. 잠시 후 다시 시도해주세요.';
+    const raw=await callChat(buildAIContext(),state.chat.slice(-12));
+    if(!raw)throw new Error('empty reply');
     const {clean,log}=extractWorkoutLog(raw);
     state.chat.push({role:'assistant',content:clean,pendingLog:log});
   }catch(e){
