@@ -2339,11 +2339,13 @@ function buildAIContext(){
   lines.push("답변은 너무 길지 않게, 핵심 위주로. 따뜻하지만 정확하게.");
   lines.push("의학적 진단·처방은 하지 말고, 통증·부상·건강 이상 신호가 있으면 전문가(의사·트레이너) 상담을 권하세요.");
   lines.push("---운동 기록 감지 규칙---");
-  lines.push("사용자가 '방금/오늘 한 운동'을 말하면(예: '벤치 80kg 10개 5세트 했어', '오늘 5km 뛰었어'), 자연스럽게 답한 뒤 답변 맨 끝에 아래 형식의 기록 태그를 한 줄로 정확히 붙이세요. 운동을 한 게 아니거나(질문·잡담·계획) 정보가 불충분하면 태그를 붙이지 마세요.");
-  lines.push("무산소 형식: [[LOG|무산소|종목|무게|횟수|세트]] 예) [[LOG|무산소|벤치프레스|80|10|5]]");
+  lines.push(`오늘 날짜: ${todayStr()}`);
+  lines.push("사용자가 '수행한 운동'을 말하면(예: '벤치 80kg 10개 5세트 했어', '오늘 5km 뛰었어', '6월 7일에 라이딩 90km 탔어'), 자연스럽게 답한 뒤 답변 맨 끝에 아래 형식의 기록 태그를 한 줄로 정확히 붙이세요. 운동을 한 게 아니거나(질문·잡담·계획) 정보가 불충분하면 태그를 붙이지 마세요.");
+  lines.push("무산소 형식: [[LOG|무산소|종목|무게|횟수|세트|날짜]] 예) [[LOG|무산소|벤치프레스|80|10|5|]]");
   lines.push("중요: '횟수'는 반드시 '한 세트당 횟수'입니다. 총 횟수가 아닙니다.");
-  lines.push("유산소 형식: [[LOG|유산소|종목|거리|시간분]] 예) [[LOG|유산소|러닝|5|30]]");
-  lines.push("값을 모르면 빈칸으로 두세요. 예) [[LOG|유산소|사이클||30]] (거리 모름). 태그는 사용자에게 설명하지 말고 그냥 끝에 붙이기만 하세요.");
+  lines.push("유산소 형식: [[LOG|유산소|종목|거리|시간분|날짜]] 예) [[LOG|유산소|러닝|5|30|]]");
+  lines.push("날짜 규칙: 사용자가 과거 날짜를 말하면(예: '6월 7일에', '어제', '3일 전에') 오늘 날짜를 기준으로 계산해 YYYY-MM-DD 형식으로 채우세요. 예) [[LOG|유산소|사이클|90|240|2026-06-07]]. 오늘 한 운동이거나 날짜 언급이 없으면 날짜를 빈칸으로 두세요.");
+  lines.push("값을 모르면 빈칸으로 두세요. 예) [[LOG|유산소|사이클||30|]] (거리 모름). 태그는 사용자에게 설명하지 말고 그냥 끝에 붙이기만 하세요.");
   lines.push("---기록 전 확인 질문 규칙(중요)---");
   lines.push("다음 경우에는 태그를 붙이지 말고, 먼저 짧은 확인 질문을 하세요. 사용자가 답하면 그때 태그를 붙이세요:");
   lines.push("1) 맨몸운동을 세트 구분 없이 총 횟수로 말한 경우(예: '푸쉬업 100개 했어') → '한 세트에 100개인가요, 아니면 총 100개인가요? 총이라면 몇 세트로 나눠서 하셨나요?'처럼 묻기. 한 세트 100개는 매우 드문 기록이므로 그대로 기록하면 등급이 잘못 올라갑니다.");
@@ -2404,14 +2406,20 @@ function extractWorkoutLog(reply){
   const parts=m[1].split('|').map(s=>s.trim());
   const type=parts[0];
   const numOr=v=>{const n=parseFloat(v);return isNaN(n)?null:n;};
+  /* 날짜 검증: YYYY-MM-DD 형식이고 미래가 아닐 때만 채택 */
+  const dateOr=v=>{
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(v||''))return null;
+    return v<=todayStr()?v:null;
+  };
   let log=null, label='';
   if(type==='무산소'){
-    log={type:'무산소',exercise:parts[1]||'운동',weight:numOr(parts[2]),reps:numOr(parts[3]),sets:numOr(parts[4]),distance:null,duration:null};
+    log={type:'무산소',exercise:parts[1]||'운동',weight:numOr(parts[2]),reps:numOr(parts[3]),sets:numOr(parts[4]),distance:null,duration:null,workout_date:dateOr(parts[5])};
     label=`💪 ${log.exercise} ${log.weight?log.weight+'kg ':''}${log.reps?log.reps+'회 ':''}${log.sets?log.sets+'세트':''}`.trim();
   }else if(type==='유산소'){
-    log={type:'유산소',exercise:parts[1]||'운동',weight:null,reps:null,sets:null,distance:numOr(parts[2]),duration:numOr(parts[3])};
+    log={type:'유산소',exercise:parts[1]||'운동',weight:null,reps:null,sets:null,distance:numOr(parts[2]),duration:numOr(parts[3]),workout_date:dateOr(parts[4])};
     label=`🏃 ${log.exercise} ${log.distance?log.distance+'km ':''}${log.duration?log.duration+'분':''}`.trim();
   }
+  if(log&&log.workout_date)label+=` · ${log.workout_date.slice(5).replace('-','/')}`;
   if(log)log.label=label;
   return {clean,log};
 }
@@ -3287,7 +3295,7 @@ async function saveDetectedWorkout(log){
   if(!state.user||!log)return false;
   const row={
     user_id:state.user.id,
-    workout_date:todayStr(),
+    workout_date:log.workout_date||todayStr(),
     type:log.type,
     exercise:log.exercise||'운동',
     weight:log.weight??null, reps:log.reps??null, sets:log.sets??null,
