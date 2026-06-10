@@ -2471,6 +2471,8 @@ const PART_MAP=[
   /* 코어 */
   [['플랭크','크런치','싯업','윗몸','레그레이즈','행잉','러시안트위스트','데드버그','마운틴클라이머','ab휠','앱휠',
     '토즈투바','할로우','사이드플랭크','plank','crunch','situp','core'],['코어']],
+  /* 맨몸 운동 */
+  [['푸쉬업','푸시업','팔굽혀','pushup','push up','push-up'],['가슴','팔']],
   /* 하이록스 동작 */
   [['월볼','wall ball','월 볼'],['하체','어깨']],
   [['슬레드푸시','슬레드 푸시','썰매밀기','sled push'],['하체']],
@@ -2519,7 +2521,14 @@ function partColor(v,max){
 function buildBodyMapCard(){
   if(!state.user)return '';
   const wk=partVolume(7);
-  if(wk.total<1)return ''; /* 이번주 기록 없으면 기본 환영문구 유지 */
+  if(wk.total<1){
+    /* 분류된 운동은 없지만 기록 자체는 있는 경우 → 최소 카드 표시 */
+    if(wk.unknown>0)return `<div class="bm-card">
+      <div class="bm-greet">이번주 ${Math.round(wk.unknown)}세트 기록 💪</div>
+      <div class="bm-note">부위를 인식하지 못한 운동이라 바디맵 분석은 생략했어요.</div>
+    </div>`;
+    return ''; /* 이번주 기록 없으면 기본 환영문구 유지 */
+  }
   const all=partVolume(0); /* 전체 기간 */
   const max=Math.max(...ALL_PARTS.map(p=>wk.vol[p]));
   const c={};ALL_PARTS.forEach(p=>c[p]=partColor(wk.vol[p],max));
