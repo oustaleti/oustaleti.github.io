@@ -489,6 +489,14 @@
     100%{box-shadow:0 0 0 0 rgba(192,57,43,0);}}
   .voice-hint{margin-top:16px;font-size:14px;font-weight:700;color:var(--muted);
     text-align:center;min-height:20px;max-width:90%;line-height:1.5;}
+  /* 타이핑 입력 */
+  .v-type-row{width:100%;max-width:480px;display:flex;gap:8px;margin-top:18px;align-items:flex-end;}
+  .v-type-row textarea{flex:1;border:1.5px solid var(--line);border-radius:12px;
+    padding:12px 14px;font-size:14.5px;font-family:inherit;resize:none;line-height:1.45;
+    max-height:110px;outline:none;background:var(--card2);color:var(--ink);}
+  .v-type-row textarea:focus{border-color:var(--blue);}
+  .v-send{flex:none;background:linear-gradient(115deg,var(--blue),var(--blue-d));color:#fff;
+    border-radius:12px;padding:0 18px;height:46px;font-size:14px;font-weight:800;}
 
   /* ===== 운동 기록 확인 카드 ===== */
   .log-confirm{align-self:flex-start;max-width:85%;background:var(--card);
@@ -2408,17 +2416,8 @@ function renderVoice(){
       </div>`;
     return;
   }
-  if(!speechSupported()){
-    wrap.innerHTML=`
-      <div class="placeholder-page">
-        <div class="pp-emoji">🎙️</div>
-        <div class="pp-title">음성 비서</div>
-        <p class="pp-desc">이 브라우저는 음성 인식을 지원하지 않아요.<br>
-          <b>크롬(Chrome)</b> 브라우저에서 열어주세요.<br>
-          그동안은 '내 상태 → 대시보드'의 글자 채팅을 이용하실 수 있어요.</p>
-      </div>`;
-    return;
-  }
+  /* 음성 미지원 브라우저여도 화면은 보여주고 타이핑으로 이용 가능 */
+  const sup=speechSupported();
   const msgs=state.voiceChat.map((m,i)=>{
     let html=`<div class="ai-msg ${m.role}">${m.role==='assistant'?'🤖 ':''}${esc(m.content).replace(/\n/g,'<br>')}</div>`;
     if(m.pendingLog){
@@ -2445,14 +2444,34 @@ function renderVoice(){
           <path d="M5 11a7 7 0 0014 0M12 18v3" stroke-linecap="round"/>
         </svg>
       </button>
-      <div class="voice-hint" id="voiceHint">마이크를 누르고 말하세요</div>
+      <div class="voice-hint" id="voiceHint">${sup?'마이크를 누르고 말하세요':'이 브라우저는 음성 미지원 — 아래에 타이핑하세요'}</div>
+      <div class="v-type-row">
+        <textarea id="vInput" rows="1" placeholder="또는, 여기에 타이핑하세요"></textarea>
+        <button class="v-send" id="vSend">전송</button>
+      </div>
       ${state.voiceChat.length?'<button class="ai-clear" id="voiceClear" style="margin:14px auto 0;display:block">대화 비우기</button>':''}
       <div class="ai-note" style="margin-top:14px">크롬에서 가장 잘 작동해요 · 답변은 참고용입니다</div>
     </div>`;
   const box=document.getElementById('voiceMsgs');
   if(box)box.scrollTop=box.scrollHeight;
-  document.getElementById('micBtn').onclick=toggleListen;
+  document.getElementById('micBtn').onclick=sup?toggleListen:()=>toast('이 브라우저는 음성 인식을 지원하지 않아요. 타이핑을 이용해주세요.');
+  if(!sup)document.getElementById('micBtn').style.opacity='.4';
   wireLogCards();
+  /* 타이핑 입력 */
+  const vi=document.getElementById('vInput'), vs=document.getElementById('vSend');
+  if(vi&&vs){
+    vi.value=state.voiceDraft||'';
+    vi.oninput=()=>{state.voiceDraft=vi.value;};
+    const sendTyped=()=>{
+      const t=vi.value.trim();
+      if(!t)return;
+      state.voiceDraft='';vi.value='';
+      stopVoice(); /* 음성 출력 중이면 중지 */
+      voiceAsk(t,false); /* 타이핑 질문엔 소리로 답하지 않음 */
+    };
+    vs.onclick=sendTyped;
+    vi.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendTyped();}};
+  }
   const vc=document.getElementById('voiceClear');
   if(vc)vc.onclick=()=>{stopVoice();state.voiceChat=[];renderVoice();};
 }
@@ -2502,7 +2521,7 @@ function stopVoice(){
   state.speaking=false;
   setMicState('');
 }
-async function voiceAsk(text){
+async function voiceAsk(text,speakReply=true){
   state.voiceChat.push({role:'user',content:text});
   renderVoice();
   setMicState('thinking');setVoiceHint('비서가 생각하고 있어요...');
@@ -2522,7 +2541,7 @@ async function voiceAsk(text){
     state.voiceChat.push({role:'assistant',content:clean,pendingLog:log});
     renderVoice();
     setMicState('');setVoiceHint('마이크를 누르고 말하세요');
-    speak(clean);
+    if(speakReply)speak(clean); /* 타이핑 질문이면 소리 없이 글로만 */
   }catch(e){
     console.error(e);
     state.voiceChat.push({role:'assistant',content:'연결에 문제가 생겼어요. 잠시 후 다시 시도해주세요.'});
