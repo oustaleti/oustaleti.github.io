@@ -124,6 +124,14 @@
   .pin-title{font-size:14.5px;font-weight:800;margin-bottom:5px;}
   .pin-body{font-size:13px;color:var(--muted);line-height:1.65;}
   .pin-body b{color:var(--ink);font-weight:800;}
+  /* 당겨서 새로고침 표시 */
+  .ptr-hint{position:fixed;top:calc(64px + env(safe-area-inset-top));left:50%;z-index:55;
+    transform:translate(-50%,-16px);opacity:0;pointer-events:none;
+    background:var(--card);border:1.5px solid var(--line);border-radius:999px;
+    padding:8px 16px;font-size:12.5px;font-weight:800;color:var(--muted);
+    box-shadow:var(--shadow);transition:opacity .12s,transform .12s;}
+  .ptr-hint.show{opacity:1;transform:translate(-50%,0);}
+  .ptr-hint.ready{color:var(--blue);border-color:var(--blue);}
   @keyframes rise{from{opacity:0;transform:translateY(10px);}}
   .card:hover{transform:translateY(-2px);border-color:var(--ink);}
   .card-top{display:flex;align-items:center;gap:8px;margin-bottom:9px;}
@@ -830,6 +838,7 @@
   <span class="fab-dot" id="fabReportDot" style="display:none"></span>
 </button>
 
+<div class="ptr-hint" id="ptrHint">↓ 당겨서 새로고침</div>
 <div class="scrim" id="scrim"><div class="modal" id="modal"></div></div>
 <div class="toast" id="toast"></div>
 <div class="lightbox" id="lightbox">
@@ -3758,8 +3767,13 @@ function swipeTab(dir){
 }
 (function(){
   let sx=0,sy=0,tracking=false,fromEdge=false,lock=null; /* lock: 'h'(가로)|'v'(세로) */
+  let ptrArm=false,ptrReady=false; /* 당겨서 새로고침 */
+  const ptrEl=()=>document.getElementById('ptrHint');
   document.addEventListener('touchstart',e=>{
     lock=null;
+    /* 화면 맨 위 + 모달 닫힘 상태에서만 새로고침 후보 */
+    ptrArm=window.scrollY<=0&&!document.getElementById('scrim').classList.contains('show');
+    ptrReady=false;
     if(e.touches.length!==1){tracking=false;return;}
     /* 입력창·버튼 등에서 시작하면 스와이프 추적 안 함 (화면 튐 방지) */
     const tag=(e.target&&e.target.tagName)||'';
@@ -3782,8 +3796,29 @@ function swipeTab(dir){
       e.preventDefault(); /* 가로 제스처 중에는 화면 세로 스크롤 정지 */
     }else if(lock==='v'){
       tracking=false; /* 세로 스크롤이면 탭 스와이프 후보에서 제외 */
+      /* 맨 위에서 아래로 당기면 새로고침 안내 표시 */
+      if(ptrArm&&dy>0&&window.scrollY<=0){
+        const h=ptrEl();
+        if(h){
+          h.classList.add('show');
+          ptrReady=dy>90;
+          h.classList.toggle('ready',ptrReady);
+          h.textContent=ptrReady?'↻ 놓으면 새로고침':'↓ 당겨서 새로고침';
+        }
+      }else{
+        const h=ptrEl();if(h)h.classList.remove('show','ready');
+        ptrReady=false;
+      }
     }
   },{passive:false});
+  document.addEventListener('touchend',()=>{
+    const h=ptrEl();
+    if(ptrReady){
+      if(h){h.textContent='새로고침 중...';h.classList.add('show','ready');}
+      setTimeout(()=>location.reload(),120);
+    }else if(h){h.classList.remove('show','ready');}
+    ptrArm=false;
+  },{passive:true});
   document.addEventListener('touchend',e=>{
     if(!tracking)return;tracking=false;
     /* 입력창·텍스트영역에서 시작한 제스처는 무시 */
