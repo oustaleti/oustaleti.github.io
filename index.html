@@ -1345,15 +1345,15 @@ function headerTapped(){
 /* ---------- 닉네임 ---------- */
 /* ---------- 구글 로그인 / 로그아웃 ---------- */
 /* 공용 소셜 로그인 — provider: 'google' | 'kakao' | 'custom:naver' */
-async function oauthLogin(provider){
-  const {error}=await db.auth.signInWithOAuth({
-    provider,
-    options:{redirectTo:window.location.origin+window.location.pathname}
-  });
+async function oauthLogin(provider,scopes){
+  const options={redirectTo:window.location.origin+window.location.pathname};
+  if(scopes)options.scopes=scopes;
+  const {error}=await db.auth.signInWithOAuth({provider,options});
   if(error){console.error(error);toast('로그인을 시작하지 못했어요');}
 }
 async function googleLogin(){oauthLogin('google');}
-async function kakaoLogin(){oauthLogin('kakao');}
+/* 카카오: 이메일(account_email)은 비즈 앱 전용이라 요청에서 제외 (KOE205 방지) */
+async function kakaoLogin(){oauthLogin('kakao','profile_nickname profile_image');}
 async function naverLogin(){oauthLogin('custom:naver');} /* Supabase 대시보드에 custom provider 'naver' 등록 필요 */
 window.googleLogin=googleLogin;
 window.kakaoLogin=kakaoLogin;
