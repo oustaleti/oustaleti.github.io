@@ -1469,13 +1469,14 @@ function openCouponModal(code){
   document.getElementById('modal').innerHTML=`
     <h3>🎉 첫 글 기념 쿠폰 도착!</h3>
     <p class="sub">커뮤니티에 첫 토론을 열어주셔서 감사해요.<br>
-      오스탈레띠 자사몰 <b>5% 할인쿠폰</b>이에요. 아래 번호를 복사한 뒤,<br>
-      쇼핑몰 <b>마이쇼핑 → 쿠폰 → 쿠폰인증번호 등록</b>에 입력하면 쿠폰이 들어와요.<br>
-      <b>등록일로부터 14일간</b> 사용 가능해요.</p>
+      오스탈레띠 자사몰 <b>5% 할인쿠폰</b>이에요.</p>
     <div class="coupon-box">
       <span class="coupon-code">${esc(code)}</span>
       <button class="coupon-copy" id="couponCopy">복사</button>
     </div>
+    <p class="sub" style="margin-top:11px">사용 방법: 쇼핑몰 로그인 → <b>마이쇼핑 → 쿠폰 → 쿠폰인증번호 등록</b>에<br>
+      위 번호를 입력하면 쿠폰이 들어와요. (주문서에서 직접 입력하면 안 돼요!)<br>
+      등록일로부터 <b>14일간</b> 사용 가능합니다.</p>
     <div class="modal-foot">
       <button class="btn-ghost" id="mClose">나중에</button>
       <button class="btn-solid" id="goShop">쇼핑몰 가기</button>
