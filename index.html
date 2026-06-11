@@ -892,6 +892,7 @@ function toast(msg){
 
 const icHeart=f=>`<svg viewBox="0 0 24 24" fill="${f?'currentColor':'none'}" stroke="currentColor" stroke-width="2"><path d="M12 21S4 14.5 4 9a4.5 4.5 0 018-2.8A4.5 4.5 0 0120 9c0 5.5-8 12-8 12z" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const icChat=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 01-11.5 7.2L4 21l1.8-5.5A8 8 0 1121 12z" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const icPen=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16.5 3.5l4 4L8 20l-5 1 1-5L16.5 3.5z" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const icTrash=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const icFlag=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 21V4m0 0c4-2 8 2 12 0v9c-4 2-8-2-12 0" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const icPhoto=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-5-5L5 19" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -969,6 +970,8 @@ function renderTabs(){
 }
 
 /* ---------- 피드 ---------- */
+/* 내 글/댓글인지 (user_id 기준, 구버전 글은 user_id가 없어 false) */
+function isMine(row){return !!(state.user&&row&&row.user_id&&row.user_id===state.user.id);}
 function threadCard(th){
   const c=catOf(th.category);
   const liked=state.liked.has('t'+th.id);
@@ -987,7 +990,8 @@ function threadCard(th){
         ${icHeart(liked)}<span>${th.likes||0}</span></button>
       <button class="act reply">${icChat}<span>${th.replies?.length||0}</span></button>
       <button class="act report ${rep?'done':''}" data-reportthread="${th.id}">${icFlag}<span>신고</span></button>
-      ${state.admin?`<button class="act del" data-delthread="${th.id}">${icTrash}<span>삭제</span></button>`:''}
+      ${isMine(th)?`<button class="act" data-editthread="${th.id}">${icPen}<span>수정</span></button>`:''}
+      ${(state.admin||isMine(th))?`<button class="act del" data-delthread="${th.id}">${icTrash}<span>삭제</span></button>`:''}
     </div></article>`;
 }
 /* ---------- 피드 광고 슬롯 (쿠팡 파트너스) ---------- */
@@ -1042,6 +1046,8 @@ function renderFeed(){
   feed.querySelectorAll('.card').forEach(card=>{
     const id=card.dataset.id;
     card.onclick=e=>{
+      const ed=e.target.closest('[data-editthread]');
+      if(ed){e.stopPropagation();openEditThread(ed.dataset.editthread);return;}
       const dl=e.target.closest('[data-delthread]');
       if(dl){e.stopPropagation();deleteThread(dl.dataset.delthread);return;}
       const rp=e.target.closest('[data-reportthread]');
@@ -1072,7 +1078,8 @@ function renderDetail(){
           ${icHeart(liked)}<span>${th.likes||0}</span></button>
         <span class="act">${icChat}<span>${reps.length}</span></span>
         <button class="act report ${state.reported.has('thread:'+th.id)?'done':''}" id="dReport">${icFlag}<span>신고</span></button>
-        ${state.admin?`<button class="act del" id="dDel">${icTrash}<span>글 삭제</span></button>`:''}
+        ${isMine(th)?`<button class="act" id="dEdit">${icPen}<span>수정</span></button>`:''}
+        ${(state.admin||isMine(th))?`<button class="act del" id="dDel">${icTrash}<span>글 삭제</span></button>`:''}
       </div></article>
     <div class="replies-head">댓글 ${reps.length}</div>
     ${reps.length?reps.map(r=>{
@@ -1087,13 +1094,15 @@ function renderDetail(){
           <button class="act like ${rl?'on':''}" data-rlike="${r.id}">
             ${icHeart(rl)}<span>${r.likes||0}</span></button>
           <button class="act report ${rrep?'done':''}" data-reportreply="${r.id}">${icFlag}<span>신고</span></button>
-          ${state.admin?`<button class="act del" data-delreply="${r.id}">${icTrash}<span>삭제</span></button>`:''}
+          ${(state.admin||isMine(r))?`<button class="act del" data-delreply="${r.id}">${icTrash}<span>삭제</span></button>`:''}
         </div></div>`;
     }).join(''):'<div class="empty-r">첫 댓글을 남겨보세요 ✍️</div>'}`;
   document.getElementById('dLike').onclick=()=>toggleLike(th.id,null,document.getElementById('dLike'));
   document.getElementById('dReport').onclick=()=>openReport('thread',th.id);
   const dDel=document.getElementById('dDel');
   if(dDel)dDel.onclick=()=>deleteThread(th.id);
+  const dEdit=document.getElementById('dEdit');
+  if(dEdit)dEdit.onclick=()=>openEditThread(th.id);
   document.getElementById('detailBody').querySelectorAll('[data-rlike]').forEach(b=>{
     b.onclick=()=>toggleLike(th.id,b.dataset.rlike,b);
   });
@@ -1148,8 +1157,42 @@ async function toggleLike(threadId,replyId,btn){
 }
 
 /* ---------- 운영자: 글/댓글 삭제 ---------- */
+/* 내 글 수정 모달 */
+function openEditThread(threadId){
+  const th=state.threads.find(t=>String(t.id)===String(threadId));
+  if(!th||!isMine(th))return;
+  document.getElementById('modal').innerHTML=`
+    <h3>글 수정</h3>
+    <textarea id="editBody" style="width:100%;min-height:140px;margin-top:10px;padding:12px;
+      border:1.5px solid var(--line);border-radius:13px;background:transparent;color:var(--ink);
+      font-family:inherit;font-size:14.5px;line-height:1.6;resize:vertical">${esc(th.body)}</textarea>
+    <div class="modal-foot">
+      <button class="btn-ghost" id="mClose">취소</button>
+      <button class="btn-solid" id="editSave">저장</button>
+    </div>`;
+  showScrim();
+  document.getElementById('mClose').onclick=hideScrim;
+  document.getElementById('editSave').onclick=async()=>{
+    const body=document.getElementById('editBody').value.trim();
+    if(!body){toast('내용을 입력해주세요');return;}
+    const btn=document.getElementById('editSave');
+    btn.textContent='저장 중...';btn.disabled=true;
+    const {error}=await db.from('threads').update({body}).eq('id',th.id);
+    if(error){console.error(error);btn.textContent='저장';btn.disabled=false;
+      toast('수정에 실패했어요');return;}
+    hideScrim();
+    await loadThreads();
+    if(state.view==='detail'){
+      state.thread=state.threads.find(t=>String(t.id)===String(th.id));
+      renderDetail();
+    }else{renderFeed();}
+    toast('글을 수정했어요 ✏️');
+  };
+}
+window.openEditThread=openEditThread;
 async function deleteThread(threadId){
-  if(!state.admin)return;
+  const th=state.threads.find(t=>String(t.id)===String(threadId));
+  if(!state.admin&&!isMine(th))return;
   if(!confirm('이 글을 삭제할까요?\n달린 댓글도 함께 사라지며, 되돌릴 수 없습니다.'))return;
   const {error}=await db.from('threads').delete().eq('id',threadId);
   if(error){console.error(error);toast('삭제에 실패했어요');return;}
@@ -1158,7 +1201,9 @@ async function deleteThread(threadId){
   await loadThreads();renderTabs();renderFeed();
 }
 async function deleteReply(threadId,replyId){
-  if(!state.admin)return;
+  const th=state.threads.find(t=>String(t.id)===String(threadId));
+  const rp=th&&(th.replies||[]).find(r=>String(r.id)===String(replyId));
+  if(!state.admin&&!isMine(rp))return;
   if(!confirm('이 댓글을 삭제할까요?\n되돌릴 수 없습니다.'))return;
   const {error}=await db.from('replies').delete().eq('id',replyId);
   if(error){console.error(error);toast('삭제에 실패했어요');return;}
@@ -1547,7 +1592,8 @@ function openCompose(){
       toast('사진 업로드에 실패했어요');return;}
     save.textContent='등록 중...';
     const {error}=await db.from('threads').insert({
-      category:state.composeCat,author:state.nick,body,is_op:false,likes:0,images});
+      category:state.composeCat,author:state.nick,body,is_op:false,likes:0,images,
+      user_id:state.user?state.user.id:null});
     if(error){console.error(error);save.textContent='등록하기';save.disabled=false;
       toast('등록에 실패했어요. 다시 시도해 주세요');return;}
     hideScrim();
@@ -1584,7 +1630,8 @@ async function sendReply(){
   try{ if(replyFiles.length)images=await uploadImages(replyFiles); }
   catch(e){send.disabled=false;send.textContent='등록';toast('사진 업로드에 실패했어요');return;}
   const {error}=await db.from('replies').insert({
-    thread_id:state.thread.id,author:state.nick,body:body||'',likes:0,images});
+    thread_id:state.thread.id,author:state.nick,body:body||'',likes:0,images,
+    user_id:state.user?state.user.id:null});
   send.textContent='등록';
   if(error){console.error(error);send.disabled=false;
     toast('댓글 등록에 실패했어요');return;}
