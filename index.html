@@ -103,6 +103,19 @@
     padding:16px 17px 13px;margin-bottom:11px;box-shadow:var(--shadow);
     cursor:pointer;transition:transform .14s, border-color .14s;
     animation:rise .4s cubic-bezier(.2,.7,.2,1) backwards;}
+  /* 피드 광고 카드 (쿠팡 파트너스) */
+  .ad-card{position:relative;background:var(--card2);border:1.5px dashed var(--line);
+    border-radius:16px;padding:14px 16px 10px;margin-bottom:11px;cursor:pointer;transition:border-color .14s;}
+  .ad-card:hover{border-color:var(--blue);}
+  .ad-badge{position:absolute;top:10px;right:12px;font-size:9.5px;font-weight:800;
+    color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1.5px 6px;letter-spacing:.05em;}
+  .ad-body{display:flex;align-items:center;gap:12px;}
+  .ad-emoji{font-size:26px;flex:none;}
+  .ad-txt{flex:1;min-width:0;}
+  .ad-title{font-size:14px;font-weight:800;}
+  .ad-desc{font-size:12px;color:var(--muted);margin-top:2px;}
+  .ad-go{flex:none;font-size:12.5px;font-weight:800;color:var(--blue);}
+  .ad-notice{margin-top:9px;font-size:9.5px;color:var(--muted);opacity:.75;line-height:1.4;}
   @keyframes rise{from{opacity:0;transform:translateY(10px);}}
   .card:hover{transform:translateY(-2px);border-color:var(--ink);}
   .card-top{display:flex;align-items:center;gap:8px;margin-bottom:9px;}
@@ -625,6 +638,13 @@
   .modal textarea{min-height:118px;resize:none;line-height:1.55;}
   .modal textarea:focus,.modal input:focus{border-color:var(--ink);}
   .modal-foot{display:flex;gap:9px;margin-top:14px;}
+  /* 첫 글 쿠폰 모달 */
+  .coupon-box{display:flex;align-items:center;gap:9px;margin-top:14px;
+    border:1.5px dashed var(--blue);border-radius:13px;padding:13px 14px;background:rgba(34,178,224,.06);}
+  .coupon-code{flex:1;font-family:'Bricolage Grotesque',monospace;font-weight:800;font-size:18px;
+    letter-spacing:.08em;color:var(--blue);}
+  .coupon-copy{flex:none;padding:7px 14px;border-radius:9px;background:var(--blue);color:#fff;
+    font-size:12.5px;font-weight:800;}
   .modal-foot button{flex:1;padding:13px;border-radius:13px;font-weight:800;font-size:14px;}
   .btn-ghost{border:1.5px solid var(--line);color:var(--muted);}
   .btn-solid{background:var(--ink);color:var(--paper);transition:.13s;}
@@ -962,6 +982,29 @@ function threadCard(th){
       ${state.admin?`<button class="act del" data-delthread="${th.id}">${icTrash}<span>삭제</span></button>`:''}
     </div></article>`;
 }
+/* ---------- 피드 광고 슬롯 (쿠팡 파트너스) ---------- */
+/* 쿠팡 파트너스에서 발급받은 링크로 교체하세요. 비워두면([]) 광고가 안 나옵니다. */
+const FEED_ADS=[
+  {title:'자전거 체인 오일 베스트',desc:'라이딩 전 체인 관리 필수템',url:'https://link.coupang.com/educate-yourself-1',emoji:'🛢️'},
+  {title:'사이클 헬멧 인기 순위',desc:'안전은 기본, 디자인은 덤',url:'https://link.coupang.com/educate-yourself-2',emoji:'🪖'},
+  {title:'폼롤러·마사지건',desc:'라이딩 후 회복 루틴',url:'https://link.coupang.com/educate-yourself-3',emoji:'💆'},
+];
+const AD_EVERY=6; /* 글 N개마다 광고 1개 */
+function adCard(ad){
+  return `<div class="ad-card" onclick="window.open('${ad.url}','_blank')">
+    <div class="ad-badge">광고</div>
+    <div class="ad-body">
+      <span class="ad-emoji">${ad.emoji||'🛒'}</span>
+      <div class="ad-txt">
+        <div class="ad-title">${esc(ad.title)}</div>
+        <div class="ad-desc">${esc(ad.desc||'')}</div>
+      </div>
+      <span class="ad-go">보기 ›</span>
+    </div>
+    <div class="ad-notice">쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다</div>
+  </div>`;
+}
+
 function renderFeed(){
   let list=state.threads.slice();
   if(state.cat!=='all')list=list.filter(t=>t.category===state.cat);
@@ -975,8 +1018,16 @@ function renderFeed(){
       <p>이 토픽의 첫 라이더가 되어보세요.</p></div>`;
     return;
   }
-  feed.innerHTML=list.map((t,i)=>threadCard(t).replace('<article class="card"',
-    `<article class="card" style="animation-delay:${Math.min(i*45,360)}ms"`)).join('');
+  let adIdx=0;
+  feed.innerHTML=list.map((t,i)=>{
+    let h=threadCard(t).replace('<article class="card"',
+      `<article class="card" style="animation-delay:${Math.min(i*45,360)}ms"`);
+    /* AD_EVERY개마다 쿠팡 파트너스 카드 삽입 */
+    if(FEED_ADS.length&&(i+1)%AD_EVERY===0){
+      h+=adCard(FEED_ADS[adIdx%FEED_ADS.length]);adIdx++;
+    }
+    return h;
+  }).join('');
   feed.querySelectorAll('.card').forEach(card=>{
     const id=card.dataset.id;
     card.onclick=e=>{
@@ -1361,6 +1412,45 @@ async function loadUser(){
   }catch(e){state.user=null;state.nick='';}
 }
 
+/* ---------- 첫 글 작성 쿠폰 ---------- */
+const FIRST_POST_COUPON={
+  code:'OUSTALETI5', /* ⚠️ Cafe24 관리자에서 만든 쿠폰 코드와 똑같이 맞춰주세요 */
+  url:'https://oustaleti.cafe24.com/'
+};
+/* 첫 글 작성 시 1회 발급 (profiles.coupon_first_post에 기록해 중복 방지) */
+async function maybeIssueFirstPostCoupon(){
+  if(!state.user)return;
+  if(state.profile&&state.profile.coupon_first_post)return; /* 이미 받음 */
+  try{
+    const {error}=await db.from('profiles')
+      .upsert({user_id:state.user.id,coupon_first_post:FIRST_POST_COUPON.code},{onConflict:'user_id'});
+    if(error)throw error;
+    state.profile=Object.assign(state.profile||{},{coupon_first_post:FIRST_POST_COUPON.code});
+    openCouponModal();
+  }catch(e){console.error('쿠폰 발급 실패',e);}
+}
+function openCouponModal(){
+  document.getElementById('modal').innerHTML=`
+    <h3>🎉 첫 글 기념 쿠폰 도착!</h3>
+    <p class="sub">커뮤니티에 첫 토론을 열어주셔서 감사해요.<br>
+      오스탈레띠 자사몰에서 쓸 수 있는 <b>5% 할인쿠폰</b>을 드립니다.</p>
+    <div class="coupon-box">
+      <span class="coupon-code">${FIRST_POST_COUPON.code}</span>
+      <button class="coupon-copy" id="couponCopy">복사</button>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-ghost" id="mClose">나중에</button>
+      <button class="btn-solid" id="goShop">쇼핑몰 가기</button>
+    </div>`;
+  showScrim();
+  document.getElementById('mClose').onclick=hideScrim;
+  document.getElementById('couponCopy').onclick=async()=>{
+    try{await navigator.clipboard.writeText(FIRST_POST_COUPON.code);toast('쿠폰 코드를 복사했어요');}
+    catch(e){toast('코드를 길게 눌러 직접 복사해주세요');}
+  };
+  document.getElementById('goShop').onclick=()=>{window.open(FIRST_POST_COUPON.url,'_blank');};
+}
+
 /* ---------- 새 글 ---------- */
 function openCompose(){
   if(!state.user){openLoginPrompt();return;}
@@ -1426,6 +1516,7 @@ function openCompose(){
     state.cat=state.composeCat;renderTabs();renderFeed();
     window.scrollTo({top:0,behavior:'smooth'});
     toast('토론을 열었어요 🚴');
+    maybeIssueFirstPostCoupon(); /* 첫 글이면 쿠폰 모달 */
   };
 }
 
