@@ -638,6 +638,14 @@
   .modal textarea{min-height:118px;resize:none;line-height:1.55;}
   .modal textarea:focus,.modal input:focus{border-color:var(--ink);}
   .modal-foot{display:flex;gap:9px;margin-top:14px;}
+  /* 소셜 로그인 버튼 */
+  .login-stack{display:flex;flex-direction:column;gap:8px;margin-top:14px;}
+  .sns-btn{width:100%;padding:13px;border-radius:13px;font-weight:800;font-size:14px;
+    font-family:inherit;cursor:pointer;border:none;transition:filter .13s;}
+  .sns-btn:hover{filter:brightness(.95);}
+  .sns-kakao{background:#FEE500;color:#191919;}
+  .sns-naver{background:#03C75A;color:#fff;}
+  .sns-google{background:#fff;color:#1f1f1f;border:1.5px solid #dadce0;}
   /* 첫 글 쿠폰 모달 */
   .coupon-box{display:flex;align-items:center;gap:9px;margin-top:14px;
     border:1.5px dashed var(--blue);border-radius:13px;padding:13px 14px;background:rgba(34,178,224,.06);}
@@ -1336,14 +1344,20 @@ function headerTapped(){
 
 /* ---------- 닉네임 ---------- */
 /* ---------- 구글 로그인 / 로그아웃 ---------- */
-async function googleLogin(){
+/* 공용 소셜 로그인 — provider: 'google' | 'kakao' | 'custom:naver' */
+async function oauthLogin(provider){
   const {error}=await db.auth.signInWithOAuth({
-    provider:'google',
+    provider,
     options:{redirectTo:window.location.origin+window.location.pathname}
   });
   if(error){console.error(error);toast('로그인을 시작하지 못했어요');}
 }
+async function googleLogin(){oauthLogin('google');}
+async function kakaoLogin(){oauthLogin('kakao');}
+async function naverLogin(){oauthLogin('custom:naver');} /* Supabase 대시보드에 custom provider 'naver' 등록 필요 */
 window.googleLogin=googleLogin;
+window.kakaoLogin=kakaoLogin;
+window.naverLogin=naverLogin;
 async function logout(){
   /* 1) 로컬 상태부터 즉시 정리 (서버 응답을 기다리지 않음) */
   state.user=null;state.nick='';
@@ -1362,21 +1376,28 @@ async function logout(){
 function openLoginPrompt(){
   document.getElementById('modal').innerHTML=`
     <h3>로그인이 필요해요</h3>
-    <p class="sub">글쓰기·댓글·좋아요는 로그인 후 이용할 수 있어요.<br>구글 계정으로 5초면 됩니다.</p>
+    <p class="sub">글쓰기·댓글·좋아요는 로그인 후 이용할 수 있어요.<br>5초면 됩니다.</p>
+    <div class="login-stack">
+      <button class="sns-btn sns-kakao" id="goKakao">카카오로 시작하기</button>
+      <button class="sns-btn sns-naver" id="goNaver">네이버로 시작하기</button>
+      <button class="sns-btn sns-google" id="goLogin">구글로 시작하기</button>
+    </div>
     <div class="modal-foot">
       <button class="btn-ghost" id="mClose">나중에</button>
-      <button class="btn-solid" id="goLogin">구글로 로그인</button>
     </div>`;
   showScrim();
   document.getElementById('mClose').onclick=hideScrim;
   document.getElementById('goLogin').onclick=googleLogin;
+  document.getElementById('goKakao').onclick=kakaoLogin;
+  document.getElementById('goNaver').onclick=naverLogin;
 }
+window.openLoginPrompt=openLoginPrompt;
 /* 헤더 계정 버튼 클릭 — 로그인 상태면 로그아웃 메뉴, 아니면 로그인 */
 function authBtnClick(){
   if(state.user){
     openLogoutPrompt();
   }else{
-    googleLogin();
+    openLoginPrompt();
   }
 }
 /* 로그아웃 확인 모달 */
@@ -1395,11 +1416,11 @@ function openLogoutPrompt(){
 const icPerson=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" stroke-linecap="round"/></svg>`;
 function paintNick(){
   const has=!!state.user;
-  document.getElementById('navNick').textContent=has?state.nick:'구글로 로그인';
+  document.getElementById('navNick').textContent=has?state.nick:'로그인';
   document.getElementById('navAv').innerHTML=has?initial(state.nick):icPerson;
   document.getElementById('promptAv').textContent=has?initial(state.nick):'?';
   const ab=document.getElementById('authBtn');
-  if(ab)ab.title=has?(state.nick+' (눌러서 로그아웃)'):'구글로 로그인';
+  if(ab)ab.title=has?(state.nick+' (눌러서 로그아웃)'):'로그인';
 }
 /* 로그인 세션 확인 후 state.user / state.nick 채우기 */
 async function loadUser(){
@@ -1664,7 +1685,7 @@ function renderStatus(){
         <div class="lk-title">로그인이 필요해요</div>
         <p class="lk-desc">내 프로필과 운동 기록은 나만 볼 수 있게
           안전하게 보관됩니다. 먼저 로그인해 주세요.</p>
-        <button class="lk-btn" onclick="googleLogin()">구글로 로그인</button>
+        <button class="lk-btn" onclick="openLoginPrompt()">로그인하기</button>
       </div>`;
     return;
   }
@@ -2838,7 +2859,7 @@ function renderVoice(){
         <div class="lk-title">로그인이 필요해요</div>
         <p class="lk-desc">음성 비서는 당신의 기록을 바탕으로 답하기 때문에
           로그인이 필요해요.</p>
-        <button class="lk-btn" onclick="googleLogin()">구글로 로그인</button>
+        <button class="lk-btn" onclick="openLoginPrompt()">로그인하기</button>
       </div>`;
     return;
   }
@@ -3427,7 +3448,7 @@ function renderAssistant(){
         <div class="lk-title">로그인이 필요해요</div>
         <p class="lk-desc">운동 기록은 나만 볼 수 있게 안전하게
           보관됩니다. 먼저 로그인해 주세요.</p>
-        <button class="lk-btn" onclick="googleLogin()">구글로 로그인</button>
+        <button class="lk-btn" onclick="openLoginPrompt()">로그인하기</button>
       </div>`;
     return;
   }
