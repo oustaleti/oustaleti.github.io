@@ -983,11 +983,11 @@ function threadCard(th){
     </div></article>`;
 }
 /* ---------- 피드 광고 슬롯 (쿠팡 파트너스) ---------- */
-/* 쿠팡 파트너스에서 발급받은 링크로 교체하세요. 비워두면([]) 광고가 안 나옵니다. */
+/* 쿠팡 파트너스 링크. cat: 노출할 탭(bike/run/hyrox/gym/gear/etc) — 전체 탭에는 광고 없음 */
 const FEED_ADS=[
-  {title:'라이더 추천템 보러가기',desc:'오스탈레띠가 고른 인기 용품',url:'https://link.coupang.com/a/euixinhEnk',emoji:'🛒'},
+  {cat:'bike',title:'자전거 체인오일',desc:'라이딩 전 30초, 체인 수명이 달라져요',url:'https://link.coupang.com/a/euixinhEnk',emoji:'🛢️'},
   /* 링크 추가 시 아래 형식으로 한 줄씩:
-  {title:'상품명',desc:'한 줄 설명',url:'https://link.coupang.com/a/...',emoji:'🛢️'},
+  {cat:'run',title:'상품명',desc:'한 줄 설명',url:'https://link.coupang.com/a/...',emoji:'👟'},
   */
 ];
 const AD_EVERY=10; /* 글 N개마다 광고 1개 */
@@ -1019,13 +1019,15 @@ function renderFeed(){
       <p>이 토픽의 첫 라이더가 되어보세요.</p></div>`;
     return;
   }
+  /* 현재 탭에 맞는 광고만 — 전체(all) 탭에는 노출 안 함 */
+  const ads=state.cat==='all'?[]:FEED_ADS.filter(a=>a.cat===state.cat);
   let adIdx=0;
   feed.innerHTML=list.map((t,i)=>{
     let h=threadCard(t).replace('<article class="card"',
       `<article class="card" style="animation-delay:${Math.min(i*45,360)}ms"`);
-    /* AD_EVERY개마다 쿠팡 파트너스 카드 삽입 */
-    if(FEED_ADS.length&&(i+1)%AD_EVERY===0){
-      h+=adCard(FEED_ADS[adIdx%FEED_ADS.length]);adIdx++;
+    /* AD_EVERY개마다 해당 탭 광고 삽입 */
+    if(ads.length&&(i+1)%AD_EVERY===0){
+      h+=adCard(ads[adIdx%ads.length]);adIdx++;
     }
     return h;
   }).join('');
