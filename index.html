@@ -882,7 +882,7 @@ const CATS=[
   {id:'gym',name:'헬스'},{id:'gear',name:'장비'},{id:'etc',name:'기타'},
   {id:'suggest',name:'건의사항'},
 ];
-const catOf=id=>CATS.find(c=>c.id===id)||CATS[CATS.length-1];
+const catOf=id=>CATS.find(c=>c.id===id)||CATS.find(c=>c.id==='etc'); /* 미분류는 항상 '기타' */
 
 let state={cat:'all',sort:'recent',threads:[],nick:'',liked:new Set(),
   view:'feed',thread:null,composeCat:'bike',admin:false,user:null,
@@ -1719,7 +1719,16 @@ function switchTab(tab){
   /* 커뮤니티로 올 땐 상세화면이 아닌 피드부터 */
   if(isCommunity&&state.view==='detail')closeDetail();
   /* 내 상태 탭이면 현재 선택된 서브탭(대시보드/프로필) 그리기 */
-  if(tab==='status')renderSubPane();
+  if(tab==='status'){
+    renderSubPane(); /* 가진 데이터로 즉시 표시 */
+    /* 최신 데이터로 백그라운드 갱신 후 다시 그리기 (탭이 그대로일 때만) */
+    if(state.user){
+      Promise.allSettled([loadWorkouts(),loadProfile()]).then(()=>{
+        const onStatus=document.getElementById('tab-status').classList.contains('on');
+        if(onStatus)renderSubPane();
+      });
+    }
+  }
   /* 비서 탭이면 음성 화면 그리기 */
   if(tab==='assistant')renderVoice();
   else stopVoice(); /* 다른 탭으로 가면 음성·읽기 중지 */
@@ -1748,8 +1757,21 @@ function switchSub(sub){
 }
 function renderSubPane(){
   const sub=state.sub||'dash';
-  if(sub==='dash')renderAssistant();   /* 대시보드 = 등급+AI채팅+운동기록 */
-  else renderStatus();                  /* 프로필 = 프로필+체중+인바디 */
+  /* 버튼·패널 표시 상태를 항상 강제 동기화 (꼬임 방지) */
+  document.querySelectorAll('.sub-tab').forEach(b=>b.classList.toggle('on',b.dataset.sub===sub));
+  document.querySelectorAll('.sub-pane').forEach(p=>p.classList.remove('on'));
+  const pane=document.getElementById('sub-'+sub);
+  if(pane)pane.classList.add('on');
+  try{
+    if(sub==='dash')renderAssistant();   /* 대시보드 = 등급+AI채팅+운동기록 */
+    else renderStatus();                  /* 프로필 = 프로필+체중+인바디 */
+  }catch(e){
+    console.error('서브패널 렌더 오류',e);
+    const wrap=document.getElementById(sub==='dash'?'wkWrap':'statusWrap');
+    if(wrap)wrap.innerHTML=`<div class="empty"><div style="font-size:34px">⚠️</div>
+      <div class="big">화면을 불러오지 못했어요</div>
+      <p>아래로 당겨 새로고침해 주세요.</p></div>`;
+  }
 }
 
 /* ---------- 내 상태 — 프로필 ---------- */
@@ -2588,7 +2610,7 @@ function buildAIContext(){
   lines.push("2) 한 세트 기준으로 일반적이지 않은 값(예: 푸쉬업 60개↑/세트, 턱걸이 25개↑/세트, 벤치 200kg↑, 스쿼트·데드 300kg↑) → '대단한데요! 혹시 한 세트 기준 맞나요?'처럼 가볍게 한 번 확인.");
   lines.push("3) 무게·횟수·세트 중 어느 값인지 불분명한 경우(예: '스쿼트 100 했어' — 100kg인지 100개인지) → 무엇인지 묻기.");
   lines.push("4) 포괄적·모호한 운동명을 시간만으로 말한 경우(예: '하이록스 2시간', '크로스핏 1시간', '헬스 2시간 했어', '운동했어') → 바로 태그하지 말고 무엇을 했는지 묻기. 예) '하이록스 전체 세션(러닝+8개 스테이션)을 도신 건가요, 아니면 특정 동작 위주로 연습하셨나요?' 전체 세션이라고 하면 [[LOG|유산소|하이록스|거리또는빈칸|시간|날짜]]로 태그하고, 특정 동작(예: 월볼, 슬레드)이라고 하면 그 동작을 무산소 형식으로 각각 태그하세요.");
-  lines.push("5) 여러 운동을 한 번에 말하면 핵심 운동 1개만 먼저 태그하고, 나머지는 '○○도 기록할까요?'라고 물어 하나씩 차례로 태그하세요.");
+  lines.push("5) 여러 운동을 한 번에 말하면(예: '푸쉬업 50개, 스쿼트 50개, 턱걸이 10개 했어') 빠짐없이 각 운동마다 태그를 하나씩, 답변 끝에 연달아 모두 붙이세요. 예) [[LOG|무산소|푸쉬업||50|1|]] [[LOG|무산소|맨몸스쿼트||50|1|]] [[LOG|무산소|턱걸이||10|1|]]");
   lines.push("확인 질문은 한 번에 하나만, 짧고 친근하게. 사용자가 이미 명확히 말했다면(예: '푸쉬업 한 세트 20개씩 5세트') 묻지 말고 바로 태그하세요.");
   lines.push("---아래는 사용자 정보입니다---");
   /* 이번주 부위별 볼륨 — 부위 균형 조언용 */
@@ -2637,28 +2659,34 @@ function buildAIContext(){
 
 /* AI 답변에서 [[LOG|...]] 추출 → {표시텍스트, row} 반환, 그리고 표시용 텍스트는 제거 */
 function extractWorkoutLog(reply){
-  const m=reply.match(/\[\[LOG\|([^\]]*)\]\]/);
-  if(!m)return {clean:reply,log:null};
-  const clean=reply.replace(/\[\[LOG\|[^\]]*\]\]/,'').trim();
-  const parts=m[1].split('|').map(s=>s.trim());
-  const type=parts[0];
+  /* 답변 안의 [[LOG|...]] 태그를 전부 추출 (여러 운동 동시 기록 지원) */
+  const matches=[...reply.matchAll(/\[\[LOG\|([^\]]*)\]\]/g)];
+  const clean=reply.replace(/\[\[LOG\|[^\]]*\]\]/g,'').trim();
+  if(!matches.length)return {clean,logs:[]};
   const numOr=v=>{const n=parseFloat(v);return isNaN(n)?null:n;};
   /* 날짜 검증: YYYY-MM-DD 형식이고 미래가 아닐 때만 채택 */
   const dateOr=v=>{
     if(!/^\d{4}-\d{2}-\d{2}$/.test(v||''))return null;
     return v<=todayStr()?v:null;
   };
-  let log=null, label='';
-  if(type==='무산소'){
-    log={type:'무산소',exercise:parts[1]||'운동',weight:numOr(parts[2]),reps:numOr(parts[3]),sets:numOr(parts[4]),distance:null,duration:null,workout_date:dateOr(parts[5])};
-    label=`💪 ${log.exercise} ${log.weight?log.weight+'kg ':''}${log.reps?log.reps+'회 ':''}${log.sets?log.sets+'세트':''}`.trim();
-  }else if(type==='유산소'){
-    log={type:'유산소',exercise:parts[1]||'운동',weight:null,reps:null,sets:null,distance:numOr(parts[2]),duration:numOr(parts[3]),workout_date:dateOr(parts[4])};
-    label=`🏃 ${log.exercise} ${log.distance?log.distance+'km ':''}${log.duration?log.duration+'분':''}`.trim();
+  const logs=[];
+  for(const m of matches){
+    const parts=m[1].split('|').map(s=>s.trim());
+    const type=parts[0];
+    let log=null, label='';
+    if(type==='무산소'){
+      log={type:'무산소',exercise:parts[1]||'운동',weight:numOr(parts[2]),reps:numOr(parts[3]),sets:numOr(parts[4]),distance:null,duration:null,workout_date:dateOr(parts[5])};
+      label=`💪 ${log.exercise} ${log.weight?log.weight+'kg ':''}${log.reps?log.reps+'회 ':''}${log.sets?log.sets+'세트':''}`.trim();
+    }else if(type==='유산소'){
+      log={type:'유산소',exercise:parts[1]||'운동',weight:null,reps:null,sets:null,distance:numOr(parts[2]),duration:numOr(parts[3]),workout_date:dateOr(parts[4])};
+      label=`🏃 ${log.exercise} ${log.distance?log.distance+'km ':''}${log.duration?log.duration+'분':''}`.trim();
+    }
+    if(!log)continue;
+    if(log.workout_date)label+=` · ${log.workout_date.slice(5).replace('-','/')}`;
+    log.label=label;
+    logs.push(log);
   }
-  if(log&&log.workout_date)label+=` · ${log.workout_date.slice(5).replace('-','/')}`;
-  if(log)log.label=label;
-  return {clean,log};
+  return {clean,logs};
 }
 /* 사용자가 즉시 기록을 지시했는지 ('기록해줘', '바로 기록해', 끝맺는 '기록' 등) */
 function wantsAutoSave(text){
@@ -2666,11 +2694,12 @@ function wantsAutoSave(text){
   return /기록해|저장해|등록해/.test(n)||/기록[!.~]*$/.test(n);
 }
 /* 운동 감지 시 "기록할까요?" 확인 카드 HTML */
-function logConfirmCard(log,where,idx){
-  if(!log)return '';
+function logConfirmCard(logs,where,idx){
+  if(!logs||!logs.length)return '';
+  const labels=logs.map(l=>`<div class="lc-label">${esc(l.label||'운동')}</div>`).join('');
   return `<div class="log-confirm" data-where="${where}" data-idx="${idx}">
-    <div class="lc-label">${esc(log.label||'운동')}</div>
-    <div class="lc-q">이 운동을 기록할까요?</div>
+    ${labels}
+    <div class="lc-q">${logs.length>1?`이 운동 ${logs.length}개를 모두 기록할까요?`:'이 운동을 기록할까요?'}</div>
     <div class="lc-btns">
       <button class="lc-yes">기록</button>
       <button class="lc-no">취소</button>
@@ -2685,7 +2714,11 @@ function wireLogCards(){
     const msg=arr[idx];
     if(!msg||!msg.pendingLog){card.style.display='none';return;}
     card.querySelector('.lc-yes').onclick=async()=>{
-      const ok=await saveDetectedWorkout(msg.pendingLog);
+      const logs=Array.isArray(msg.pendingLog)?msg.pendingLog:[msg.pendingLog];
+      let ok=true;
+      for(const lg of logs){ /* 순서대로 전부 저장 */
+        if(!(await saveDetectedWorkout(lg)))ok=false;
+      }
       if(ok){
         msg.pendingLog=null;
         card.innerHTML='<div class="lc-done">✓ 기록 완료</div>';
@@ -2974,7 +3007,7 @@ function renderVoice(){
       html+=logConfirmCard(m.pendingLog,'voice',i);
     }
     if(m.autoSaved){
-      html+=`<div class="log-confirm"><div class="lc-label">${esc(m.autoSaved)}</div><div class="lc-done">✓ 기록 완료</div></div>`;
+      html+=`<div class="log-confirm">${esc(m.autoSaved).split('\n').map(l=>`<div class="lc-label">${l}</div>`).join('')}<div class="lc-done">✓ 기록 완료</div></div>`;
       if(i===state.voiceChat.length-1)html+=`<div style="margin:12px 0">${buildBodyMapCard('d30')}</div>`;
     }
     return html;
@@ -3085,14 +3118,15 @@ async function voiceAsk(text,speakReply=true){
       buildAIContext()+"\n\n[음성 대화 모드: 답변은 듣기 편하게 2~4문장으로 짧고 자연스럽게 말하듯이 해주세요.]",
       state.voiceChat.slice(-10));
     if(!raw)throw new Error('empty reply');
-    const {clean,log}=extractWorkoutLog(raw);
-    /* '기록해줘' 등 지시어가 있으면 확인 카드 없이 바로 저장 */
+    const {clean,logs}=extractWorkoutLog(raw);
+    /* '기록해줘' 등 지시어가 있으면 확인 카드 없이 바로 저장 (전부) */
     let autoSaved=null;
-    if(log&&wantsAutoSave(text)){
-      const ok=await saveDetectedWorkout(log);
-      if(ok)autoSaved=log.label||'운동';
+    if(logs.length&&wantsAutoSave(text)){
+      let allOk=true;
+      for(const lg of logs){if(!(await saveDetectedWorkout(lg)))allOk=false;}
+      if(allOk)autoSaved=logs.map(l=>l.label||'운동').join('\n');
     }
-    state.voiceChat.push({role:'assistant',content:clean,pendingLog:autoSaved?null:log,autoSaved});
+    state.voiceChat.push({role:'assistant',content:clean,pendingLog:autoSaved?null:(logs.length?logs:null),autoSaved});
     renderVoice();
     setMicState('');setVoiceHint(VOICE_HINT_DEFAULT);
     if(speakReply)speak(clean); /* 타이핑 질문이면 소리 없이 글로만 */
@@ -3155,13 +3189,14 @@ async function sendToAI(){
   try{
     const raw=await callChat(buildAIContext(),state.chat.slice(-12));
     if(!raw)throw new Error('empty reply');
-    const {clean,log}=extractWorkoutLog(raw);
+    const {clean,logs}=extractWorkoutLog(raw);
     let autoSaved=null;
-    if(log&&wantsAutoSave(text)){
-      const ok=await saveDetectedWorkout(log);
-      if(ok)autoSaved=log.label||'운동';
+    if(logs.length&&wantsAutoSave(text)){
+      let allOk=true;
+      for(const lg of logs){if(!(await saveDetectedWorkout(lg)))allOk=false;}
+      if(allOk)autoSaved=logs.map(l=>l.label||'운동').join('\n');
     }
-    state.chat.push({role:'assistant',content:clean,pendingLog:autoSaved?null:log,autoSaved});
+    state.chat.push({role:'assistant',content:clean,pendingLog:autoSaved?null:(logs.length?logs:null),autoSaved});
   }catch(e){
     console.error(e);
     state.chat.push({role:'assistant',content:'연결에 문제가 생겼어요. 잠시 후 다시 시도해주세요.'});
@@ -3178,7 +3213,7 @@ function rerenderChat(scroll){
   let html=state.chat.map((m,i)=>{
     let h=`<div class="ai-msg ${m.role}">${m.role==='assistant'?'🤖 ':''}${esc(m.content).replace(/\n/g,'<br>')}</div>`;
     if(m.pendingLog)h+=logConfirmCard(m.pendingLog,'text',i);
-    if(m.autoSaved)h+=`<div class="log-confirm"><div class="lc-label">${esc(m.autoSaved)}</div><div class="lc-done">✓ 기록 완료</div></div>`;
+    if(m.autoSaved)h+=`<div class="log-confirm">${esc(m.autoSaved).split('\n').map(l=>`<div class="lc-label">${l}</div>`).join('')}<div class="lc-done">✓ 기록 완료</div></div>`;
     return h;
   }).join('');
   if(state.aiBusy)html+=`<div class="ai-msg assistant ai-typing">🤖 <span></span><span></span><span></span></div>`;
