@@ -603,15 +603,16 @@
   .reply-dock .send:disabled{background:var(--line);color:var(--muted);}
   .reply-dock .send:not(:disabled):hover{opacity:.82;}
 
-  .fab{position:fixed;bottom:84px;z-index:35;left:50%;
-    transform:translateX(calc(340px - 100% - 18px));
+  .fab{position:fixed;bottom:calc(84px + env(safe-area-inset-bottom));z-index:35;left:50%;
+    /* 화면이 680px보다 좁으면 화면 폭 기준으로 보정 (모바일 잘림 방지) */
+    transform:translateX(calc(min(340px,50vw) - 100% - 18px));
     width:56px;height:56px;border-radius:50%;background:var(--ink);color:var(--paper);
     box-shadow:0 10px 26px -6px rgba(10,10,10,.5);display:grid;place-items:center;transition:.15s;}
-  .fab:hover{transform:translateX(calc(340px - 100% - 18px)) scale(1.07);}
+  .fab:hover{transform:translateX(calc(min(340px,50vw) - 100% - 18px)) scale(1.07);}
   .fab svg{width:26px;height:26px;}
-  .fab-report{bottom:152px;background:#C0392B;
+  .fab-report{bottom:calc(152px + env(safe-area-inset-bottom));background:#C0392B;
     box-shadow:0 10px 26px -6px rgba(192,57,28,.55);}
-  .fab-report:hover{transform:translateX(calc(340px - 100% - 18px)) scale(1.07);}
+  .fab-report:hover{transform:translateX(calc(min(340px,50vw) - 100% - 18px)) scale(1.07);}
   .fab-dot{position:absolute;top:9px;right:9px;width:12px;height:12px;
     border-radius:50%;background:#fff;border:2.5px solid #C0392B;}
   @media(max-width:720px){.fab{left:auto;right:18px;transform:none;}
