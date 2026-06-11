@@ -1352,8 +1352,21 @@ async function oauthLogin(provider,scopes){
   if(error){console.error(error);toast('로그인을 시작하지 못했어요');}
 }
 async function googleLogin(){oauthLogin('google');}
-/* 카카오: 이메일(account_email)은 비즈 앱 전용이라 요청에서 제외 (KOE205 방지) */
-async function kakaoLogin(){oauthLogin('kakao','profile_nickname profile_image');}
+/* 카카오: 이메일(account_email)은 비즈 앱 전용이라 KOE205가 발생.
+   Supabase가 만든 인증 URL에서 scope를 닉네임+프로필사진으로 교체한 뒤 이동한다. */
+async function kakaoLogin(){
+  const {data,error}=await db.auth.signInWithOAuth({
+    provider:'kakao',
+    options:{
+      redirectTo:window.location.origin+window.location.pathname,
+      skipBrowserRedirect:true /* 자동 이동 막고 URL만 받기 */
+    }
+  });
+  if(error||!data||!data.url){console.error(error);toast('로그인을 시작하지 못했어요');return;}
+  const u=new URL(data.url);
+  u.searchParams.set('scope','profile_nickname profile_image');
+  window.location.href=u.toString();
+}
 async function naverLogin(){oauthLogin('custom:naver');} /* Supabase 대시보드에 custom provider 'naver' 등록 필요 */
 window.googleLogin=googleLogin;
 window.kakaoLogin=kakaoLogin;
