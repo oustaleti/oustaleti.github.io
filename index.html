@@ -116,6 +116,14 @@
   .ad-desc{font-size:12px;color:var(--muted);margin-top:2px;}
   .ad-go{flex:none;font-size:12.5px;font-weight:800;color:var(--blue);}
   .ad-notice{margin-top:9px;font-size:9.5px;color:var(--muted);opacity:.75;line-height:1.4;}
+  /* 건의사항 고정 안내 카드 */
+  .pin-card{background:rgba(34,178,224,.07);border:1.5px solid var(--blue);border-radius:16px;
+    padding:15px 17px;margin-bottom:11px;}
+  .pin-badge{display:inline-block;font-size:10.5px;font-weight:800;color:#fff;background:var(--blue);
+    border-radius:6px;padding:2.5px 8px;letter-spacing:.04em;margin-bottom:8px;}
+  .pin-title{font-size:14.5px;font-weight:800;margin-bottom:5px;}
+  .pin-body{font-size:13px;color:var(--muted);line-height:1.65;}
+  .pin-body b{color:var(--ink);font-weight:800;}
   @keyframes rise{from{opacity:0;transform:translateY(10px);}}
   .card:hover{transform:translateY(-2px);border-color:var(--ink);}
   .card-top{display:flex;align-items:center;gap:8px;margin-bottom:9px;}
@@ -863,6 +871,7 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const CATS=[
   {id:'bike',name:'자전거'},{id:'run',name:'러닝'},{id:'hyrox',name:'하이록스'},
   {id:'gym',name:'헬스'},{id:'gear',name:'장비'},{id:'etc',name:'기타'},
+  {id:'suggest',name:'건의사항'},
 ];
 const catOf=id=>CATS.find(c=>c.id===id)||CATS[CATS.length-1];
 
@@ -1028,16 +1037,24 @@ function renderFeed(){
     :new Date(b.created_at)-new Date(a.created_at));
   document.getElementById('count').textContent=`토론 ${list.length}`;
   const feed=document.getElementById('feed');
+  /* 건의사항 탭: 고정 안내 카드 (유튜브 고정 댓글처럼 항상 맨 위) */
+  const pinned=state.cat==='suggest'?`<div class="pin-card">
+    <div class="pin-badge">📌 고정</div>
+    <div class="pin-title">여기는 건의사항 게시판이에요</div>
+    <div class="pin-body">앱을 사용하면서 느끼는 <b>불편한 점</b>, <b>개선할 점</b>,
+      <b>생기면 좋은 기능</b>을 자유롭게 공유해주세요.<br>
+      하나하나 읽고 오스탈레띠를 발전시키는 데 반영할게요 🙏</div>
+  </div>`:'';
   if(!list.length){
-    feed.innerHTML=`<div class="empty"><div style="font-size:34px">🚲</div>
+    feed.innerHTML=pinned+`<div class="empty"><div style="font-size:34px">${state.cat==='suggest'?'💬':'🚲'}</div>
       <div class="big">아직 글이 없어요</div>
-      <p>이 토픽의 첫 라이더가 되어보세요.</p></div>`;
+      <p>${state.cat==='suggest'?'첫 건의사항을 남겨주세요. 작은 의견도 큰 도움이 됩니다.':'이 토픽의 첫 라이더가 되어보세요.'}</p></div>`;
     return;
   }
   /* 현재 탭에 맞는 광고만 — 전체(all) 탭에는 노출 안 함 */
   const ads=state.cat==='all'?[]:FEED_ADS.filter(a=>a.cat===state.cat);
   let adIdx=0;
-  feed.innerHTML=list.map((t,i)=>{
+  feed.innerHTML=pinned+list.map((t,i)=>{
     let h=threadCard(t).replace('<article class="card"',
       `<article class="card" style="animation-delay:${Math.min(i*45,360)}ms"`);
     /* AD_EVERY개마다 해당 탭 광고 삽입 */
