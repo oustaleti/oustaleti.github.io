@@ -4,7 +4,7 @@
 <!-- OUSTALETI — 라이더 라운지 (Supabase 연결 / 실서비스 버전) -->
 <meta charset="utf-8">
 <title>오스탈레띠 라이더 라운지</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="description" content="오스탈레띠 라이더 라운지 — 운동하는 모든 사람의 토론 커뮤니티">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -618,6 +618,8 @@
     .fab:hover{transform:scale(1.07);}
     .fab-report:hover{transform:scale(1.07);}}
 
+  /* iOS 포커스 확대 방지: 입력요소는 항상 16px 이상 */
+  input,textarea,select{font-size:max(16px,1em);}
   .scrim{position:fixed;inset:0;z-index:60;background:rgba(10,10,10,.55);
     display:none;align-items:flex-end;justify-content:center;backdrop-filter:blur(2px);}
   .scrim.show{display:flex;animation:fade .2s;}
@@ -1643,7 +1645,19 @@ async function sendReply(){
 }
 
 function showScrim(){document.getElementById('scrim').classList.add('show');}
-function hideScrim(){document.getElementById('scrim').classList.remove('show');}
+function hideScrim(){
+  const s=document.getElementById('scrim');
+  s.classList.remove('show');s.style.paddingBottom='';
+}
+/* 키보드가 올라오면 모달(바텀시트)을 키보드 높이만큼 위로 밀기 */
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize',()=>{
+    const s=document.getElementById('scrim');
+    if(!s||!s.classList.contains('show'))return;
+    const kb=Math.max(0,window.innerHeight-window.visualViewport.height);
+    s.style.paddingBottom=kb?kb+'px':'';
+  });
+}
 
 /* ---------- 이벤트 연결 ---------- */
 document.querySelectorAll('.sort button').forEach(b=>{
@@ -2959,7 +2973,7 @@ function renderVoice(){
       </button>
       <div class="voice-hint" id="voiceHint">${sup?VOICE_HINT_DEFAULT:'이 브라우저는 음성 미지원 — 아래에 타이핑하세요'}</div>
       <div class="v-type-row">
-        <textarea id="vInput" rows="1" placeholder="또는, 여기에 타이핑하세요"></textarea>
+        <textarea id="vInput" rows="1" enterkeyhint="send" placeholder="또는, 여기에 타이핑하세요"></textarea>
         <button class="v-send" id="vSend">전송</button>
       </div>
       ${state.voiceChat.length?'<button class="ai-clear" id="voiceClear" style="margin:14px auto 0;display:block">⌂ 첫화면으로 돌아가기</button>':''}
