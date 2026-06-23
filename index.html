@@ -10,6 +10,71 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&display=swap" rel="stylesheet">
+<!-- Leaflet (지도/경로 표시) -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  /* ===== 기록 측정 (GPS) ===== */
+  #tab-record{padding-bottom:120px;}
+  .rec-wrap{padding:16px 16px 0;}
+  .rec-head{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:21px;
+    margin:6px 2px 14px;display:flex;align-items:center;gap:9px;}
+  .rec-head .rh-dot{width:9px;height:9px;border-radius:50%;background:var(--blue);box-shadow:0 0 0 4px rgba(34,178,224,.18);}
+  /* 운동 종목 선택 */
+  .rec-types{display:flex;gap:8px;margin-bottom:14px;}
+  .rec-type{flex:1;background:var(--card);border:1.5px solid var(--line);border-radius:14px;
+    padding:13px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;transition:.14s;}
+  .rec-type .rt-ic{font-size:22px;line-height:1;}
+  .rec-type .rt-nm{font-size:12.5px;font-weight:800;color:var(--muted);}
+  .rec-type.on{border-color:var(--blue);background:rgba(34,178,224,.10);box-shadow:3px 3px 0 var(--blue);}
+  .rec-type.on .rt-nm{color:var(--ink);}
+  /* 시작 버튼 */
+  .rec-start{width:100%;background:var(--blue);color:#fff;border-radius:16px;
+    padding:18px;font-size:17px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px;
+    box-shadow:0 12px 24px -10px rgba(34,178,224,.7);transition:.14s;}
+  .rec-start:active{transform:scale(.98);}
+  .rec-start svg{width:22px;height:22px;}
+  .rec-hint{text-align:center;font-size:11.5px;color:var(--muted);margin:11px 4px 20px;line-height:1.6;}
+  /* 지도 */
+  #recMap,#detMap{width:100%;height:300px;border-radius:16px;border:1.5px solid var(--line);
+    background:var(--card2);z-index:1;}
+  .leaflet-container{font-family:'Pretendard',sans-serif;background:#0c0e10;}
+  /* 실시간 측정 화면 */
+  .rec-live{padding:16px 16px 0;}
+  .rec-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0;}
+  .rec-stat{background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:14px 14px 12px;}
+  .rec-stat.big{grid-column:1 / -1;text-align:center;background:var(--card2);}
+  .rs-val{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:30px;line-height:1.1;letter-spacing:-.01em;}
+  .rec-stat.big .rs-val{font-size:46px;}
+  .rs-unit{font-size:14px;color:var(--muted);font-weight:700;margin-left:3px;}
+  .rs-lbl{font-size:11px;color:var(--muted);font-weight:700;margin-top:4px;letter-spacing:.03em;}
+  .rec-ctrls{display:flex;gap:10px;margin:16px 0;position:sticky;bottom:84px;z-index:5;}
+  .rec-btn{flex:1;border-radius:14px;padding:16px;font-size:15px;font-weight:800;transition:.14s;}
+  .rec-btn:active{transform:scale(.98);}
+  .rec-btn.pause{background:var(--card2);border:1.5px solid var(--line);color:var(--ink);}
+  .rec-btn.resume{background:var(--blue);color:#fff;}
+  .rec-btn.stop{background:#e0483a;color:#fff;}
+  .rec-acc{text-align:center;font-size:11px;color:var(--muted);margin-bottom:10px;}
+  .rec-acc .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle;}
+  .rec-acc .dot.good{background:#3fbf6a;}.rec-acc .dot.ok{background:#e0a93a;}.rec-acc .dot.bad{background:#e0483a;}
+  /* 기록 목록 */
+  .rec-hist-h{font-size:13px;font-weight:800;color:var(--muted);margin:24px 4px 12px;letter-spacing:.02em;}
+  .act-item{display:flex;align-items:center;gap:13px;background:var(--card);border:1.5px solid var(--line);
+    border-radius:14px;padding:13px 15px;margin-bottom:10px;cursor:pointer;transition:.14s;}
+  .act-item:hover{border-color:var(--ink);}
+  .act-ic{width:42px;height:42px;border-radius:12px;background:var(--card2);display:grid;place-items:center;font-size:21px;flex:none;}
+  .act-info{flex:1;min-width:0;}
+  .act-title{font-size:14.5px;font-weight:800;}
+  .act-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+  .act-dist{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:18px;text-align:right;flex:none;}
+  .act-dist small{display:block;font-size:10.5px;color:var(--muted);font-weight:700;}
+  .rec-empty{text-align:center;color:var(--muted);font-size:13px;padding:30px 10px;line-height:1.7;}
+  /* 상세 모달 */
+  .det-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;}
+  .det-stat{background:var(--card2);border-radius:12px;padding:12px 8px;text-align:center;}
+  .det-stat .dv{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:18px;}
+  .det-stat .dl{font-size:10.5px;color:var(--muted);font-weight:700;margin-top:3px;}
+</style>
 
 <style>
   :root{
@@ -823,6 +888,11 @@
       <div class="status-wrap" id="statusWrap"></div>
     </div>
   </div>
+
+  <!-- ===== 기록 측정 탭 (GPS) ===== -->
+  <div class="page" id="tab-record">
+    <div class="rec-wrap" id="recWrap"></div>
+  </div>
 </div><!-- /shell -->
 
 <button class="fab" id="fab" aria-label="글쓰기" style="display:none">
@@ -858,6 +928,10 @@
     <span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 01-11.5 7.2L4 21l1.8-5.5A8 8 0 1121 12z" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     커뮤니티
   </button>
+  <button class="nav-item" data-tab="record">
+    <span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    기록
+  </button>
   <button class="nav-item" data-tab="status">
     <span class="ni-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
     내 상태
@@ -887,7 +961,8 @@ const catOf=id=>CATS.find(c=>c.id===id)||CATS.find(c=>c.id==='etc'); /* 미분�
 let state={cat:'all',sort:'recent',threads:[],nick:'',liked:new Set(),
   view:'feed',thread:null,composeCat:'bike',admin:false,user:null,
   reported:new Set(),reports:[],profile:null,workouts:[],wkType:'무산소',races:[],weights:[],inbody:[],chat:[],aiBusy:false,sub:'dash',
-  voiceChat:[],recog:null,listening:false,speaking:false};
+  voiceChat:[],recog:null,listening:false,speaking:false,
+  activities:[],recType:'run'};
 
 /* ---------- 닉네임/좋아요 = 이 브라우저에만 저장 ---------- */
 function lget(k){try{return localStorage.getItem(k);}catch(e){return null;}}
@@ -1732,6 +1807,8 @@ function switchTab(tab){
   /* 비서 탭이면 음성 화면 그리기 */
   if(tab==='assistant')renderVoice();
   else stopVoice(); /* 다른 탭으로 가면 음성·읽기 중지 */
+  /* 기록 탭이면 GPS 측정 화면 그리기 */
+  if(tab==='record')renderRecord();
   lset('ost_tab',tab); /* 새로고침 시 현재 탭 유지 */
   window.scrollTo(0,0);
 }
@@ -3784,7 +3861,7 @@ document.getElementById('replyPhotoIn').onchange=function(){
 };
 
 /* ---------- 스와이프 제스처 (탭 전환 + 뒤로가기) ---------- */
-const TAB_ORDER=['assistant','community','status'];
+const TAB_ORDER=['assistant','community','record','status'];
 function currentTab(){
   for(const t of TAB_ORDER){
     if(document.getElementById('tab-'+t).classList.contains('on'))return t;
@@ -3932,6 +4009,270 @@ function swipeTab(dir){
   else wireBanner();
 })();
 
+/* ============================================================
+   ▼ 기록 측정 (GPS) — 스트라바/가민식 실시간 추적 ▼
+   ============================================================ */
+const ACT_TYPES={
+  run :{ic:'🏃',name:'러닝',     metric:'pace'},
+  ride:{ic:'🚴',name:'자전거',   metric:'speed'},
+  walk:{ic:'🚶',name:'걷기',     metric:'pace'},
+};
+let rec={active:false,paused:false,type:'run',points:[],dist:0,
+  startTs:0,accMs:0,watchId:null,timer:null,map:null,line:null,dot:null,
+  lastAcc:null,wake:null,followed:true};
+
+/* --- 계산 유틸 --- */
+function haversine(a,b){ /* 두 좌표 사이 거리(m) */
+  const R=6371000, toR=Math.PI/180;
+  const dLat=(b.lat-a.lat)*toR, dLng=(b.lng-a.lng)*toR;
+  const la1=a.lat*toR, la2=b.lat*toR;
+  const h=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
+}
+function fmtDur(s){ s=Math.floor(s);
+  const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60;
+  return (h>0?h+':':'')+String(m).padStart(h>0?2:1,'0')+':'+String(x).padStart(2,'0');
+}
+function recElapsedSec(){
+  if(!rec.active)return 0;
+  let ms=rec.accMs; if(!rec.paused)ms+=Date.now()-rec.startTs; return ms/1000;
+}
+function fmtPace(sec,km){ /* 분'초" /km */
+  if(km<0.01||sec<2)return "--'--\"";
+  const p=sec/60/km; let m=Math.floor(p), s=Math.round((p-m)*60);
+  if(s===60){s=0;m++;} return m+"'"+String(s).padStart(2,'0')+'"';
+}
+function fmtSpeed(sec,km){ if(sec<2)return '0.0'; return (km/(sec/3600)).toFixed(1); }
+
+/* --- Supabase 로드 --- */
+async function loadActivities(){
+  if(!state.user){state.activities=[];return;}
+  try{
+    const {data}=await db.from('activities').select('*')
+      .eq('user_id',state.user.id).order('created_at',{ascending:false});
+    state.activities=data||[];
+  }catch(e){state.activities=[];}
+}
+
+/* --- 메인 렌더 (대기 화면 / 측정 중 화면 분기) --- */
+function renderRecord(){
+  const wrap=document.getElementById('recWrap'); if(!wrap)return;
+  if(rec.active){ renderLive(wrap); return; }
+  const t=state.recType||'run';
+  wrap.innerHTML=`
+    <div class="rec-head"><span class="rh-dot"></span>기록 측정</div>
+    <div class="rec-types">${Object.entries(ACT_TYPES).map(([k,v])=>`
+      <button class="rec-type ${k===t?'on':''}" data-rt="${k}">
+        <span class="rt-ic">${v.ic}</span><span class="rt-nm">${v.name}</span></button>`).join('')}</div>
+    <button class="rec-start" id="recStartBtn">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> 측정 시작</button>
+    <div class="rec-hint">시작을 누르면 GPS로 이동 거리·속도·경로를 자동으로 기록해요.<br>
+      ※ 정확한 측정을 위해 야외에서, 화면을 켠 상태로 사용하세요.</div>
+    <div class="rec-hist-h">내 기록</div>
+    <div id="actList"></div>`;
+  wrap.querySelectorAll('[data-rt]').forEach(b=>b.onclick=()=>{state.recType=b.dataset.rt;renderRecord();});
+  document.getElementById('recStartBtn').onclick=startRecording;
+  renderHistory();
+}
+
+/* --- 기록 목록 --- */
+function renderHistory(){
+  const box=document.getElementById('actList'); if(!box)return;
+  if(!state.user){ box.innerHTML=`<div class="rec-empty">로그인하면 측정 기록이 저장돼요.</div>`; return; }
+  const acts=state.activities||[];
+  if(!acts.length){ box.innerHTML=`<div class="rec-empty">아직 기록이 없어요.<br>첫 측정을 시작해 보세요 🏃</div>`; return; }
+  box.innerHTML=acts.map(a=>{
+    const v=ACT_TYPES[a.type]||ACT_TYPES.run;
+    const km=+a.distance||0, sec=+a.duration||0;
+    const metricStr=v.metric==='pace'?fmtPace(sec,km)+' /km':fmtSpeed(sec,km)+' km/h';
+    const d=new Date(a.created_at);
+    const ds=`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `<div class="act-item" data-act="${a.id}">
+      <div class="act-ic">${v.ic}</div>
+      <div class="act-info"><div class="act-title">${v.name}</div>
+        <div class="act-sub">${ds} · ${fmtDur(sec)} · ${metricStr}</div></div>
+      <div class="act-dist">${km.toFixed(2)}<small>km</small></div></div>`;
+  }).join('');
+  box.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>openActivity(b.dataset.act));
+}
+
+/* --- 측정 시작 --- */
+function startRecording(){
+  if(!('geolocation' in navigator)){toast('이 기기는 위치 기능을 지원하지 않아요');return;}
+  rec.active=true; rec.paused=false; rec.type=state.recType||'run';
+  rec.points=[]; rec.dist=0; rec.accMs=0; rec.startTs=Date.now();
+  rec.lastAcc=null; rec.followed=true;
+  renderRecord(); /* → 측정 중 화면 + 지도 생성 */
+  if('wakeLock' in navigator){ try{navigator.wakeLock.request('screen').then(w=>{rec.wake=w;}).catch(()=>{});}catch(e){} }
+  rec.watchId=navigator.geolocation.watchPosition(onPosition,onGeoErr,
+    {enableHighAccuracy:true,maximumAge:1000,timeout:20000});
+  rec.timer=setInterval(updateLiveStats,1000);
+}
+function onGeoErr(e){
+  if(e&&e.code===1){ toast('위치 권한을 허용해야 측정할 수 있어요'); stopRecording(true); }
+}
+function onPosition(pos){
+  const c=pos.coords; rec.lastAcc=c.accuracy;
+  if(!rec.active||rec.paused)return;
+  if(c.accuracy>50)return;                 /* 정확도 낮은 신호 무시 */
+  const pt={lat:c.latitude,lng:c.longitude,t:Date.now()};
+  const prev=rec.points[rec.points.length-1];
+  if(prev){
+    const seg=haversine(prev,pt);
+    if(seg<1.5)return;                       /* GPS 잡음(제자리 흔들림) 무시 */
+    if(seg<80)rec.dist+=seg;                 /* 비현실적 점프는 거리에서 제외 */
+  }
+  rec.points.push(pt);
+  drawLive(pt);
+}
+function drawLive(pt){
+  if(!rec.map)return;
+  if(rec.line)rec.line.setLatLngs(rec.points.map(p=>[p.lat,p.lng]));
+  if(rec.dot)rec.dot.setLatLng([pt.lat,pt.lng]);
+  if(rec.followed)rec.map.panTo([pt.lat,pt.lng],{animate:true,duration:.5});
+}
+
+/* --- 측정 중 화면 --- */
+function renderLive(wrap){
+  const v=ACT_TYPES[rec.type]||ACT_TYPES.run;
+  wrap.innerHTML=`
+    <div class="rec-live">
+      <div id="recMap"></div>
+      <div class="rec-acc" id="recAcc"></div>
+      <div class="rec-stats">
+        <div class="rec-stat big"><div class="rs-val" id="rsDist">0.00<span class="rs-unit">km</span></div><div class="rs-lbl">거리</div></div>
+        <div class="rec-stat"><div class="rs-val" id="rsTime">0:00</div><div class="rs-lbl">시간</div></div>
+        <div class="rec-stat"><div class="rs-val" id="rsMetric">--</div><div class="rs-lbl">${v.metric==='pace'?'페이스 /km':'속도 km/h'}</div></div>
+      </div>
+      <div class="rec-ctrls" id="recCtrls"></div>
+    </div>`;
+  if(rec.map){try{rec.map.remove();}catch(e){}rec.map=null;}
+  rec.map=L.map('recMap',{zoomControl:false,attributionControl:false}).setView([37.5665,126.978],16);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(rec.map);
+  rec.line=L.polyline([],{color:'#22b2e0',weight:5,opacity:.9}).addTo(rec.map);
+  rec.dot=L.circleMarker([37.5665,126.978],{radius:7,color:'#fff',weight:3,fillColor:'#22b2e0',fillOpacity:1}).addTo(rec.map);
+  rec.map.on('dragstart',()=>{rec.followed=false;});
+  setTimeout(()=>{ if(rec.map)rec.map.invalidateSize(); },200);
+  if(rec.points.length){
+    const last=rec.points[rec.points.length-1];
+    rec.line.setLatLngs(rec.points.map(p=>[p.lat,p.lng]));
+    rec.dot.setLatLng([last.lat,last.lng]);
+    rec.map.setView([last.lat,last.lng],16);
+  }
+  renderCtrls();
+  updateLiveStats();
+}
+function renderCtrls(){
+  const c=document.getElementById('recCtrls'); if(!c)return;
+  c.innerHTML=rec.paused
+    ? `<button class="rec-btn resume" id="recResume">▶ 계속</button><button class="rec-btn stop" id="recStop">■ 종료</button>`
+    : `<button class="rec-btn pause" id="recPause">⏸ 일시정지</button><button class="rec-btn stop" id="recStop">■ 종료</button>`;
+  const p=document.getElementById('recPause'); if(p)p.onclick=pauseRecording;
+  const r=document.getElementById('recResume'); if(r)r.onclick=resumeRecording;
+  document.getElementById('recStop').onclick=()=>{ if(confirm('측정을 종료하고 저장할까요?'))stopRecording(); };
+}
+function updateLiveStats(){
+  if(!rec.active)return;
+  const km=rec.dist/1000, sec=recElapsedSec();
+  const v=ACT_TYPES[rec.type]||ACT_TYPES.run;
+  const dEl=document.getElementById('rsDist'); if(dEl)dEl.innerHTML=`${km.toFixed(2)}<span class="rs-unit">km</span>`;
+  const tEl=document.getElementById('rsTime'); if(tEl)tEl.textContent=fmtDur(sec);
+  const mEl=document.getElementById('rsMetric'); if(mEl)mEl.textContent=v.metric==='pace'?fmtPace(sec,km):fmtSpeed(sec,km);
+  const a=document.getElementById('recAcc');
+  if(a){ const acc=rec.lastAcc; let cls='bad',txt='GPS 신호 대기 중...';
+    if(acc!=null){ if(acc<=15){cls='good';txt='GPS 양호';}
+      else if(acc<=35){cls='ok';txt='GPS 보통';}
+      else {cls='bad';txt='GPS 약함 — 야외로 이동하세요';} }
+    a.innerHTML=`<span class="dot ${cls}"></span>${txt}${acc!=null?` (±${Math.round(acc)}m)`:''}${rec.paused?' · ⏸ 일시정지됨':''}`;
+  }
+}
+function pauseRecording(){ if(!rec.active||rec.paused)return;
+  rec.accMs+=Date.now()-rec.startTs; rec.paused=true; renderCtrls(); updateLiveStats(); }
+function resumeRecording(){ if(!rec.active||!rec.paused)return;
+  rec.startTs=Date.now(); rec.paused=false; renderCtrls(); updateLiveStats(); }
+
+/* --- 측정 종료 --- */
+function stopRecording(silent){
+  if(rec.watchId!=null){ try{navigator.geolocation.clearWatch(rec.watchId);}catch(e){} rec.watchId=null; }
+  if(rec.timer){ clearInterval(rec.timer); rec.timer=null; }
+  if(rec.wake){ try{rec.wake.release();}catch(e){} rec.wake=null; }
+  const km=rec.dist/1000, sec=recElapsedSec();
+  if(rec.map){ try{rec.map.remove();}catch(e){} rec.map=null; rec.line=null; rec.dot=null; }
+  const finished={type:rec.type,distance:+km.toFixed(3),duration:Math.round(sec),points:rec.points.slice()};
+  rec.active=false; rec.paused=false; rec.points=[]; rec.dist=0;
+  if(silent){ renderRecord(); return; }
+  if(finished.distance<0.02||finished.duration<5){
+    toast('기록이 너무 짧아 저장하지 않았어요'); renderRecord(); return;
+  }
+  saveActivity(finished);
+}
+
+/* --- Supabase 저장 --- */
+async function saveActivity(f){
+  if(!state.user){ toast('로그인하면 기록을 저장할 수 있어요'); renderRecord(); openActivity(f); return; }
+  const row={ user_id:state.user.id, type:f.type, distance:f.distance, duration:f.duration,
+    route:f.points.map(p=>[+p.lat.toFixed(5),+p.lng.toFixed(5)]) };
+  try{
+    const {data,error}=await db.from('activities').insert(row).select();
+    if(error)throw error;
+    if(data&&data[0])state.activities.unshift(data[0]);
+    toast('기록을 저장했어요 🎉');
+    renderRecord();
+    if(data&&data[0])openActivity(data[0]);
+  }catch(e){ console.error(e); toast('저장 실패 — activities 테이블을 확인하세요'); renderRecord(); openActivity(f); }
+}
+
+/* --- 기록 상세 (지도 + 지표) --- */
+function openActivity(arg){
+  const a=(arg&&typeof arg==='object')?arg:(state.activities||[]).find(x=>String(x.id)===String(arg));
+  if(!a)return;
+  const v=ACT_TYPES[a.type]||ACT_TYPES.run;
+  const km=+a.distance||0, sec=+a.duration||0;
+  let route=Array.isArray(a.route)?a.route:[];
+  if(typeof a.route==='string'){ try{route=JSON.parse(a.route)||[];}catch(e){route=[];} }
+  const metricNum=v.metric==='pace'?fmtPace(sec,km):fmtSpeed(sec,km);
+  const metricLbl=v.metric==='pace'?'평균 페이스':'평균 속도 (km/h)';
+  const dateStr=a.created_at?new Date(a.created_at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'방금 측정';
+  document.getElementById('modal').innerHTML=`
+    <h3>${v.ic} ${v.name}</h3>
+    <p class="sub">${dateStr}</p>
+    ${route.length?`<div id="detMap" style="height:210px;border-radius:14px;margin-top:10px;border:1.5px solid var(--line)"></div>`:`<p class="sub" style="margin-top:8px">경로 데이터가 없어요.</p>`}
+    <div class="det-stats">
+      <div class="det-stat"><div class="dv">${km.toFixed(2)}</div><div class="dl">거리 (km)</div></div>
+      <div class="det-stat"><div class="dv">${fmtDur(sec)}</div><div class="dl">시간</div></div>
+      <div class="det-stat"><div class="dv">${metricNum}</div><div class="dl">${metricLbl}</div></div>
+    </div>
+    <div class="modal-foot">
+      ${a.id?`<button class="btn-ghost" id="actDel" style="color:#e0483a">삭제</button>`:''}
+      <button class="btn-ghost" id="actClose">닫기</button>
+    </div>`;
+  showScrim();
+  if(route.length){
+    setTimeout(()=>{
+      const el=document.getElementById('detMap'); if(!el)return;
+      const m=L.map('detMap',{zoomControl:false,attributionControl:false});
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(m);
+      const line=L.polyline(route,{color:'#22b2e0',weight:5}).addTo(m);
+      L.circleMarker(route[0],{radius:6,color:'#fff',weight:2,fillColor:'#3fbf6a',fillOpacity:1}).addTo(m);
+      L.circleMarker(route[route.length-1],{radius:6,color:'#fff',weight:2,fillColor:'#e0483a',fillOpacity:1}).addTo(m);
+      try{m.fitBounds(line.getBounds(),{padding:[24,24]});}catch(e){m.setView(route[0],15);}
+      m.invalidateSize();
+    },130);
+  }
+  const dc=document.getElementById('actClose'); if(dc)dc.onclick=hideScrim;
+  const dd=document.getElementById('actDel'); if(dd)dd.onclick=()=>delActivity(a.id);
+}
+async function delActivity(id){
+  if(!confirm('이 기록을 삭제할까요?'))return;
+  try{
+    const {error}=await db.from('activities').delete().eq('id',id);
+    if(error)throw error;
+    state.activities=(state.activities||[]).filter(a=>String(a.id)!==String(id));
+    hideScrim(); renderRecord(); toast('기록을 삭제했어요');
+  }catch(e){ console.error(e); toast('삭제에 실패했어요'); }
+}
+window.openActivity=openActivity;
+
 /* ---------- 시작 ---------- */
 (async function init(){
   renderTabs();
@@ -3939,7 +4280,7 @@ function swipeTab(dir){
   /* 저장된 마지막 탭을 먼저 띄워 빈 화면 방지 */
   const savedSub=lget('ost_sub'); if(savedSub==='dash'||savedSub==='profile')state.sub=savedSub;
   const savedTab=lget('ost_tab');
-  const startTab=(savedTab==='community'||savedTab==='status'||savedTab==='assistant')?savedTab:'assistant';
+  const startTab=(savedTab==='community'||savedTab==='status'||savedTab==='assistant'||savedTab==='record')?savedTab:'assistant';
   switchTab(startTab);
   /* 데이터 로드 (하나라도 실패해도 화면은 유지) */
   try{
@@ -3949,6 +4290,7 @@ function swipeTab(dir){
     await loadRaces();
     await loadWeights();
     await loadInbody();
+    await loadActivities();
     state.admin=lget('ost_admin')==='1';
     try{const lk=lget('ost_liked');if(lk)state.liked=new Set(JSON.parse(lk));}catch(e){}
     try{const rp=lget('ost_reported');if(rp)state.reported=new Set(JSON.parse(rp));}catch(e){}
@@ -3960,6 +4302,7 @@ function swipeTab(dir){
   renderFeed();
   if(startTab==='assistant')renderVoice();
   else if(startTab==='status')renderSubPane();
+  else if(startTab==='record')renderRecord();
   /* 로그인 상태 변화 감지 (구글 로그인/로그아웃 시) */
   db.auth.onAuthStateChange(async()=>{
     try{
@@ -3969,12 +4312,14 @@ function swipeTab(dir){
       await loadRaces();
       await loadWeights();
       await loadInbody();
+      await loadActivities();
     }catch(e){ console.error('상태변화 로드 오류',e); }
     paintNick();
     try{
       if(state.view==='detail')renderDetail();else renderFeed();
       if(document.getElementById('tab-assistant').classList.contains('on'))renderVoice();
       if(document.getElementById('tab-status').classList.contains('on'))renderSubPane();
+      if(document.getElementById('tab-record').classList.contains('on'))renderRecord();
     }catch(e){ console.error('상태변화 렌더 오류',e); }
   });
 })();
