@@ -59,6 +59,11 @@
   .rec-acc{text-align:center;font-size:11px;color:var(--muted);margin-bottom:10px;}
   .rec-acc .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle;}
   .rec-acc .dot.good{background:#3fbf6a;}.rec-acc .dot.ok{background:#e0a93a;}.rec-acc .dot.bad{background:#e0483a;}
+  .rec-sensor{width:100%;margin:2px 0 4px;border:1.5px dashed var(--line);border-radius:13px;
+    padding:13px;font-size:13px;font-weight:800;color:var(--muted);background:transparent;
+    font-family:'JetBrains Mono','Pretendard',sans-serif;letter-spacing:.02em;transition:.14s;}
+  .rec-sensor:active{transform:scale(.99);}
+  .rec-sensor.on{border-style:solid;border-color:var(--blue);color:var(--ink);background:rgba(232,144,42,.08);}
   /* 기록 목록 */
   .rec-hist-h{font-size:13px;font-weight:800;color:var(--muted);margin:24px 4px 12px;letter-spacing:.02em;}
   .act-item{display:flex;align-items:center;gap:13px;background:var(--card);border:1.5px solid var(--line);
@@ -4052,7 +4057,11 @@ const ACT_TYPES={
 };
 let rec={active:false,paused:false,type:'run',points:[],dist:0,
   startTs:0,accMs:0,watchId:null,timer:null,map:null,line:null,dot:null,
-  lastAcc:null,wake:null,followed:true};
+  lastAcc:null,wake:null,followed:true,
+  curSpeed:null,grade:null,cadence:null,power:null,sensor:false,
+  powSum:0,powCount:0,powMax:0,cadSum:0,cadCount:0,cadMax:0,elevGain:0};
+/* BLE 센서(케이던스·파워) 연동 상태 */
+let ble={device:null,lastCrankRev:null,lastCrankTime:null};
 
 /* --- 계산 유틸 --- */
 function haversine(a,b){ /* 두 좌표 사이 거리(m) */
@@ -4135,6 +4144,9 @@ function startRecording(){
   rec.active=true; rec.paused=false; rec.type=state.recType||'run';
   rec.points=[]; rec.dist=0; rec.accMs=0; rec.startTs=Date.now();
   rec.lastAcc=null; rec.followed=true;
+  rec.curSpeed=null; rec.grade=null; rec.cadence=null; rec.power=null;
+  rec.powSum=0; rec.powCount=0; rec.powMax=0; rec.cadSum=0; rec.cadCount=0; rec.cadMax=0; rec.elevGain=0;
+  ble.lastCrankRev=null; ble.lastCrankTime=null;
   renderRecord(); /* → 측정 중 화면 + 지도 생성 */
   if('wakeLock' in navigator){ try{navigator.wakeLock.request('screen').then(w=>{rec.wake=w;}).catch(()=>{});}catch(e){} }
   rec.watchId=navigator.geolocation.watchPosition(onPosition,onGeoErr,
@@ -4148,13 +4160,29 @@ function onPosition(pos){
   const c=pos.coords; rec.lastAcc=c.accuracy;
   if(!rec.active||rec.paused)return;
   if(c.accuracy>50)return;                 /* 정확도 낮은 신호 무시 */
-  const pt={lat:c.latitude,lng:c.longitude,t:Date.now()};
+  const pt={lat:c.latitude,lng:c.longitude,t:Date.now(),
+            alt:(c.altitude!=null&&!isNaN(c.altitude))?c.altitude:null};
   const prev=rec.points[rec.points.length-1];
+  /* 현재 속도(km/h): GPS 제공값 우선, 없으면 두 점으로 계산 */
+  let sp=(c.speed!=null&&c.speed>=0)?c.speed*3.6:null;
   if(prev){
     const seg=haversine(prev,pt);
-    if(seg<1.5)return;                       /* GPS 잡음(제자리 흔들림) 무시 */
+    if(seg<1.5){                             /* GPS 잡음 — 정지로 간주, 속도만 감쇠 */
+      if(sp==null)sp=0;
+      rec.curSpeed=(rec.curSpeed==null?sp:rec.curSpeed*0.7+sp*0.3);
+      return;
+    }
     if(seg<80)rec.dist+=seg;                 /* 비현실적 점프는 거리에서 제외 */
+    if(sp==null){ const dt=(pt.t-prev.t)/1000; if(dt>0)sp=seg/dt*3.6; }
+    /* 경사도(%): 고도차/수평거리, GPS 고도는 잡음이 커 강하게 평활화 */
+    if(pt.alt!=null&&prev.alt!=null&&seg>=4){
+      const dAlt=pt.alt-prev.alt;
+      const g=Math.max(-30,Math.min(30,dAlt/seg*100));
+      rec.grade=(rec.grade==null?g:rec.grade*0.7+g*0.3);
+      if(dAlt>0.5&&dAlt<seg)rec.elevGain+=dAlt;   /* 누적 상승고도(잡음 억제) */
+    }
   }
+  if(sp!=null)rec.curSpeed=(rec.curSpeed==null?sp:rec.curSpeed*0.6+sp*0.4);
   rec.points.push(pt);
   drawLive(pt);
 }
@@ -4168,17 +4196,36 @@ function drawLive(pt){
 /* --- 측정 중 화면 --- */
 function renderLive(wrap){
   const v=ACT_TYPES[rec.type]||ACT_TYPES.run;
+  let statsHtml, sensorHtml='';
+  if(rec.type==='ride'){
+    const sensorRow=rec.sensor
+      ? `<div class="rec-stat"><div class="rs-val" id="rsCad">--<span class="rs-unit">rpm</span></div><div class="rs-lbl">케이던스</div></div>
+         <div class="rec-stat"><div class="rs-val" id="rsPow">--<span class="rs-unit">W</span></div><div class="rs-lbl">파워</div></div>`
+      : '';
+    statsHtml=`
+      <div class="rec-stat big"><div class="rs-val" id="rsDist">0.00<span class="rs-unit">km</span></div><div class="rs-lbl">거리</div></div>
+      <div class="rec-stat"><div class="rs-val" id="rsCur">0.0<span class="rs-unit">km/h</span></div><div class="rs-lbl">현재 속도</div></div>
+      <div class="rec-stat"><div class="rs-val" id="rsAvg">0.0<span class="rs-unit">km/h</span></div><div class="rs-lbl">평균 속도</div></div>
+      <div class="rec-stat"><div class="rs-val" id="rsTime">0:00</div><div class="rs-lbl">시간</div></div>
+      <div class="rec-stat"><div class="rs-val" id="rsGrade">--<span class="rs-unit">%</span></div><div class="rs-lbl">경사도</div></div>
+      ${sensorRow}`;
+    sensorHtml=`<button class="rec-sensor ${rec.sensor?'on':''}" id="recSensor">${rec.sensor?('🔗 센서 연결됨'+(ble.device&&ble.device.name?' · '+esc(ble.device.name):'')+' (해제하려면 탭)'):'+ 케이던스·파워 센서 연결'}</button>`;
+  }else{
+    statsHtml=`
+      <div class="rec-stat big"><div class="rs-val" id="rsDist">0.00<span class="rs-unit">km</span></div><div class="rs-lbl">거리</div></div>
+      <div class="rec-stat"><div class="rs-val" id="rsTime">0:00</div><div class="rs-lbl">시간</div></div>
+      <div class="rec-stat"><div class="rs-val" id="rsMetric">--</div><div class="rs-lbl">페이스 /km</div></div>`;
+  }
   wrap.innerHTML=`
     <div class="rec-live">
       <div id="recMap"></div>
       <div class="rec-acc" id="recAcc"></div>
-      <div class="rec-stats">
-        <div class="rec-stat big"><div class="rs-val" id="rsDist">0.00<span class="rs-unit">km</span></div><div class="rs-lbl">거리</div></div>
-        <div class="rec-stat"><div class="rs-val" id="rsTime">0:00</div><div class="rs-lbl">시간</div></div>
-        <div class="rec-stat"><div class="rs-val" id="rsMetric">--</div><div class="rs-lbl">${v.metric==='pace'?'페이스 /km':'속도 km/h'}</div></div>
-      </div>
+      <div class="rec-stats">${statsHtml}</div>
+      ${sensorHtml}
       <div class="rec-ctrls" id="recCtrls"></div>
     </div>`;
+  const sb=document.getElementById('recSensor');
+  if(sb)sb.onclick=()=>{ rec.sensor?disconnectSensor():connectSensor(); };
   if(rec.map){try{rec.map.remove();}catch(e){}rec.map=null;}
   rec.map=L.map('recMap',{zoomControl:false,attributionControl:false}).setView([37.5665,126.978],16);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(rec.map);
@@ -4208,9 +4255,21 @@ function updateLiveStats(){
   if(!rec.active)return;
   const km=rec.dist/1000, sec=recElapsedSec();
   const v=ACT_TYPES[rec.type]||ACT_TYPES.run;
-  const dEl=document.getElementById('rsDist'); if(dEl)dEl.innerHTML=`${km.toFixed(2)}<span class="rs-unit">km</span>`;
+  const set=(id,html)=>{const el=document.getElementById(id);if(el)el.innerHTML=html;};
+  set('rsDist',`${km.toFixed(2)}<span class="rs-unit">km</span>`);
   const tEl=document.getElementById('rsTime'); if(tEl)tEl.textContent=fmtDur(sec);
   const mEl=document.getElementById('rsMetric'); if(mEl)mEl.textContent=v.metric==='pace'?fmtPace(sec,km):fmtSpeed(sec,km);
+  /* 자전거 전용 지표 (해당 요소가 있을 때만 갱신) */
+  set('rsCur',`${rec.curSpeed!=null?rec.curSpeed.toFixed(1):'0.0'}<span class="rs-unit">km/h</span>`);
+  set('rsAvg',`${fmtSpeed(sec,km)}<span class="rs-unit">km/h</span>`);
+  set('rsGrade',`${rec.grade!=null?(rec.grade>0?'+':'')+rec.grade.toFixed(1):'--'}<span class="rs-unit">%</span>`);
+  set('rsCad',`${rec.cadence!=null?rec.cadence:'--'}<span class="rs-unit">rpm</span>`);
+  set('rsPow',`${rec.power!=null?rec.power:'--'}<span class="rs-unit">W</span>`);
+  /* 평균 산출용 누적 (1초마다, 주행 중·센서 연결 시) */
+  if(rec.type==='ride'&&!rec.paused&&rec.sensor){
+    if(rec.power!=null){ rec.powSum+=rec.power; rec.powCount++; if(rec.power>rec.powMax)rec.powMax=rec.power; }
+    if(rec.cadence!=null&&rec.cadence>0){ rec.cadSum+=rec.cadence; rec.cadCount++; if(rec.cadence>rec.cadMax)rec.cadMax=rec.cadence; }
+  }
   const a=document.getElementById('recAcc');
   if(a){ const acc=rec.lastAcc; let cls='bad',txt='GPS 신호 대기 중...';
     if(acc!=null){ if(acc<=15){cls='good';txt='GPS 양호';}
@@ -4231,7 +4290,11 @@ function stopRecording(silent){
   if(rec.wake){ try{rec.wake.release();}catch(e){} rec.wake=null; }
   const km=rec.dist/1000, sec=recElapsedSec();
   if(rec.map){ try{rec.map.remove();}catch(e){} rec.map=null; rec.line=null; rec.dot=null; }
-  const finished={type:rec.type,distance:+km.toFixed(3),duration:Math.round(sec),points:rec.points.slice()};
+  const finished={type:rec.type,distance:+km.toFixed(3),duration:Math.round(sec),points:rec.points.slice(),
+    avg_cadence:rec.cadCount?Math.round(rec.cadSum/rec.cadCount):null,
+    avg_power:rec.powCount?Math.round(rec.powSum/rec.powCount):null,
+    max_power:rec.powMax||null,
+    elev_gain:rec.elevGain?Math.round(rec.elevGain):null};
   rec.active=false; rec.paused=false; rec.points=[]; rec.dist=0;
   if(silent){ renderRecord(); return; }
   if(finished.distance<0.02||finished.duration<5){
@@ -4243,15 +4306,28 @@ function stopRecording(silent){
 /* --- Supabase 저장 --- */
 async function saveActivity(f){
   if(!state.user){ toast('로그인하면 기록을 저장할 수 있어요'); renderRecord(); openActivity(f); return; }
-  const row={ user_id:state.user.id, type:f.type, distance:f.distance, duration:f.duration,
+  const base={ user_id:state.user.id, type:f.type, distance:f.distance, duration:f.duration,
     route:f.points.map(p=>[+p.lat.toFixed(5),+p.lng.toFixed(5)]) };
+  /* 센서/고도 지표는 있을 때만 추가 (컬럼이 없으면 자동으로 빼고 재시도) */
+  const extra={};
+  if(f.avg_cadence!=null)extra.avg_cadence=f.avg_cadence;
+  if(f.avg_power!=null)extra.avg_power=f.avg_power;
+  if(f.max_power!=null)extra.max_power=f.max_power;
+  if(f.elev_gain!=null)extra.elev_gain=f.elev_gain;
+  const tryInsert=async(row)=>db.from('activities').insert(row).select();
   try{
-    const {data,error}=await db.from('activities').insert(row).select();
+    let {data,error}=await tryInsert({...base,...extra});
+    let msg='기록을 저장했어요 🎉';
+    if(error&&Object.keys(extra).length){            /* 컬럼 미존재 등 → 기본 항목만으로 재시도 */
+      console.warn('확장 컬럼 저장 실패, 기본 저장으로 재시도', error);
+      ({data,error}=await tryInsert(base));
+      if(!error)msg='기록 저장됨 (센서 항목은 DB 컬럼 추가 필요)';
+    }
     if(error)throw error;
     if(data&&data[0])state.activities.unshift(data[0]);
-    toast('기록을 저장했어요 🎉');
+    toast(msg);
     renderRecord();
-    if(data&&data[0])openActivity(data[0]);
+    openActivity(data&&data[0]?data[0]:f);
   }catch(e){ console.error(e); toast('저장 실패 — activities 테이블을 확인하세요'); renderRecord(); openActivity(f); }
 }
 
@@ -4266,6 +4342,12 @@ function openActivity(arg){
   const metricNum=v.metric==='pace'?fmtPace(sec,km):fmtSpeed(sec,km);
   const metricLbl=v.metric==='pace'?'평균 페이스':'평균 속도 (km/h)';
   const dateStr=a.created_at?new Date(a.created_at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'방금 측정';
+  /* 센서/고도 지표 (있을 때만) */
+  let extraStats='';
+  if(a.avg_cadence!=null)extraStats+=`<div class="det-stat"><div class="dv">${a.avg_cadence}</div><div class="dl">평균 케이던스</div></div>`;
+  if(a.avg_power!=null)extraStats+=`<div class="det-stat"><div class="dv">${a.avg_power}</div><div class="dl">평균 파워 (W)</div></div>`;
+  if(a.max_power!=null)extraStats+=`<div class="det-stat"><div class="dv">${a.max_power}</div><div class="dl">최대 파워 (W)</div></div>`;
+  if(a.elev_gain!=null)extraStats+=`<div class="det-stat"><div class="dv">${a.elev_gain}</div><div class="dl">상승 고도 (m)</div></div>`;
   document.getElementById('modal').innerHTML=`
     <h3>${v.ic} ${v.name}</h3>
     <p class="sub">${dateStr}</p>
@@ -4274,6 +4356,7 @@ function openActivity(arg){
       <div class="det-stat"><div class="dv">${km.toFixed(2)}</div><div class="dl">거리 (km)</div></div>
       <div class="det-stat"><div class="dv">${fmtDur(sec)}</div><div class="dl">시간</div></div>
       <div class="det-stat"><div class="dv">${metricNum}</div><div class="dl">${metricLbl}</div></div>
+      ${extraStats}
     </div>
     <div class="modal-foot">
       ${a.id?`<button class="btn-ghost" id="actDel" style="color:#e0483a">삭제</button>`:''}
@@ -4305,6 +4388,98 @@ async function delActivity(id){
   }catch(e){ console.error(e); toast('삭제에 실패했어요'); }
 }
 window.openActivity=openActivity;
+
+/* ============================================================
+   ▼ BLE 센서 연동 — 케이던스(CSC) / 파워(Cycling Power) ▼
+   Web Bluetooth (안드로이드 크롬 등 지원, iOS Safari 미지원)
+   ============================================================ */
+async function connectSensor(){
+  if(!navigator.bluetooth){
+    toast('이 브라우저는 센서 연동을 지원하지 않아요 (아이폰은 미지원)');
+    return;
+  }
+  try{
+    const device=await navigator.bluetooth.requestDevice({
+      filters:[{services:['cycling_power']},{services:['cycling_speed_and_cadence']}],
+      optionalServices:['cycling_power','cycling_speed_and_cadence']
+    });
+    ble.device=device;
+    device.addEventListener('gattserverdisconnected',onSensorDisconnect);
+    const server=await device.gatt.connect();
+    let connected=false;
+    /* 파워(+크랭크 케이던스) */
+    try{
+      const ps=await server.getPrimaryService('cycling_power');
+      const pc=await ps.getCharacteristic('cycling_power_measurement');
+      await pc.startNotifications();
+      pc.addEventListener('characteristicvaluechanged',onPowerData);
+      connected=true;
+    }catch(e){}
+    /* 속도·케이던스(CSC) */
+    try{
+      const cs=await server.getPrimaryService('cycling_speed_and_cadence');
+      const cc=await cs.getCharacteristic('csc_measurement');
+      await cc.startNotifications();
+      cc.addEventListener('characteristicvaluechanged',onCscData);
+      connected=true;
+    }catch(e){}
+    if(!connected){ toast('지원되는 센서 데이터를 찾지 못했어요'); try{device.gatt.disconnect();}catch(e){} return; }
+    rec.sensor=true; ble.lastCrankRev=null; ble.lastCrankTime=null;
+    toast('센서 연결됨: '+(device.name||'기기'));
+    if(rec.active)renderRecord();
+  }catch(e){
+    if(e&&e.name!=='NotFoundError'){ console.error(e); toast('센서 연결에 실패했어요'); }
+  }
+}
+function disconnectSensor(){
+  try{ if(ble.device&&ble.device.gatt&&ble.device.gatt.connected)ble.device.gatt.disconnect(); }catch(e){}
+  rec.sensor=false; rec.cadence=null; rec.power=null;
+  if(rec.active)renderRecord();
+  toast('센서 연결을 해제했어요');
+}
+function onSensorDisconnect(){
+  rec.sensor=false; rec.cadence=null; rec.power=null;
+  if(rec.active)renderRecord();
+  toast('센서 연결이 끊겼어요');
+}
+/* 케이던스 계산: 누적 크랭크 회전수 + 마지막 이벤트 시각(1/1024초), 16비트 롤오버 처리 */
+function calcCadence(rev,time){
+  if(ble.lastCrankRev!=null){
+    let dRev=rev-ble.lastCrankRev; if(dRev<0)dRev+=65536;
+    let dT=time-ble.lastCrankTime; if(dT<0)dT+=65536;
+    const dtSec=dT/1024;
+    if(dtSec>0){ const rpm=dRev/dtSec*60; if(rpm>=0&&rpm<300)rec.cadence=Math.round(rpm); }
+    else if(dRev===0){ rec.cadence=0; }
+  }
+  ble.lastCrankRev=rev; ble.lastCrankTime=time;
+}
+/* Cycling Power Measurement (0x2A63) */
+function onPowerData(e){
+  const dv=e.target.value;
+  const flags=dv.getUint16(0,true);
+  rec.power=dv.getInt16(2,true);           /* 순간 파워(W) */
+  if(flags&0x20){                          /* 크랭크 회전 데이터 존재 */
+    let off=4;
+    if(flags&0x01)off+=1;                  /* 페달 파워 밸런스(uint8) */
+    if(flags&0x04)off+=2;                  /* 누적 토크(uint16) */
+    if(flags&0x10)off+=6;                  /* 휠 회전 데이터(uint32+uint16) */
+    if(off+4<=dv.byteLength){
+      calcCadence(dv.getUint16(off,true),dv.getUint16(off+2,true));
+    }
+  }
+}
+/* CSC Measurement (0x2A5B) */
+function onCscData(e){
+  const dv=e.target.value;
+  const flags=dv.getUint8(0);
+  let off=1;
+  if(flags&0x01)off+=6;                    /* 휠 회전 데이터(uint32+uint16) */
+  if(flags&0x02){                          /* 크랭크 회전 데이터 */
+    if(off+4<=dv.byteLength){
+      calcCadence(dv.getUint16(off,true),dv.getUint16(off+2,true));
+    }
+  }
+}
 
 /* ---------- 시작 ---------- */
 (async function init(){
