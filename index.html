@@ -100,6 +100,12 @@
   /* 오렌지 배경 위 글자는 진한색으로 (브랜드 블랙-온-오렌지, 가독성) */
   .rec-start,.rec-btn.resume,.pin-badge,.pf-chip.on,.wk-add,.wk-tag.ae,.wt-add-btn,
   .ai-send,.bm-tab.on,.lc-yes,.coupon-copy,.iab-btn{color:#1a1200 !important;}
+  /* 가독성: 도트매트릭스는 대형 히어로 숫자에만, 중소형 숫자는 클린 모노 */
+  .sum-card .sc-main,.gc-sub-badge,.act-dist,.det-stat .dv,.coupon-code,
+  .bm-bar-val .bv-n,.bm-bar-val em{font-family:'JetBrains Mono',monospace !important;font-style:normal !important;}
+  .rs-val,.gc-score{font-weight:900;letter-spacing:0;}
+  .bm-bar-val .bv-n{font-size:14px;font-weight:700;color:#fff;}
+  .bm-bar-val em{font-size:10.5px;letter-spacing:0;}
 </style>
 
 <style>
@@ -639,9 +645,10 @@
       rgba(255,255,255,.09) calc(20% - 1px),rgba(255,255,255,.09) 20%);}
   .bm-bar-fill{height:100%;background:linear-gradient(90deg,var(--blue-d),var(--blue));
     border-radius:999px;transition:width .4s;}
-  .bm-bar-val{width:52px;flex:none;text-align:right;font-size:11px;font-weight:800;color:var(--ink);
+  .bm-bar-val{width:56px;flex:none;text-align:right;font-size:11px;font-weight:800;color:var(--ink);
     display:flex;flex-direction:column;align-items:flex-end;line-height:1.25;}
-  .bm-bar-val em{font-style:normal;font-size:9.5px;font-weight:700;color:var(--muted);}
+  .bm-bar-val .bv-n{font-family:'Doto','Pretendard',monospace;font-weight:700;font-size:15px;margin-right:2px;letter-spacing:.02em;}
+  .bm-bar-val em{font-style:normal;font-size:10px;font-weight:700;color:var(--muted);font-family:'Doto','Pretendard',monospace;letter-spacing:.03em;}
   .bm-stats{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
   .bm-stat{flex:1;min-width:90px;background:var(--card2);border-radius:11px;padding:9px 11px;
     display:flex;flex-direction:column;gap:2px;}
@@ -3028,7 +3035,7 @@ function buildBodyMapCard(period){
     return `<div class="bm-bar-row">
       <span class="bm-bar-name">${p}</span>
       <div class="bm-bar-track"><div class="bm-bar-fill" style="width:${w}%;opacity:${val?1:.25}"></div></div>
-      <span class="bm-bar-val">${val?`${fmtV(val)}세트<em>${share}%</em>`:'–'}</span>
+      <span class="bm-bar-val">${val?`<span class="bv-line"><b class="bv-n">${fmtV(val)}</b>세트</span><em>${share}%</em>`:'–'}</span>
     </div>`;
   }).join('');
   /* 앞/뒤 인체 SVG — 부위별 색 */
