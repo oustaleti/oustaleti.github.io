@@ -64,6 +64,20 @@
     font-family:'JetBrains Mono','Pretendard',sans-serif;letter-spacing:.02em;transition:.14s;}
   .rec-sensor:active{transform:scale(.99);}
   .rec-sensor.on{border-style:solid;border-color:var(--blue);color:var(--ink);background:rgba(232,144,42,.08);}
+  /* ===== 빠른 종목 선택 패널 ===== */
+  .vquick{margin:10px 0 4px;background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:12px;animation:rise .25s cubic-bezier(.2,.7,.2,1) backwards;}
+  .vq-h{font-family:'JetBrains Mono','Pretendard',monospace;font-size:9.5px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);margin:0 2px 8px;}
+  .vq-row{display:flex;flex-wrap:wrap;gap:7px;}
+  .vq-recent{margin-bottom:12px;} .vq-recent:empty{display:none;margin:0;}
+  .vq-cats{display:flex;gap:8px;margin-bottom:10px;}
+  .vq-cat{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:9px;font-size:13px;
+    font-weight:800;color:var(--muted);background:var(--card2);transition:.13s;}
+  .vq-cat.on{border-color:var(--blue);color:var(--ink);background:rgba(232,144,42,.10);box-shadow:2px 2px 0 var(--blue);}
+  .vq-chip{border:1.5px solid var(--line);border-radius:999px;padding:8px 13px;font-size:13px;
+    font-weight:700;color:var(--ink);background:var(--card2);transition:.13s;}
+  .vq-chip:active{transform:scale(.95);}
+  .vq-chip.recent{border-color:var(--blue);color:var(--blue);}
   /* 기록 목록 */
   .rec-hist-h{font-size:13px;font-weight:800;color:var(--muted);margin:24px 4px 12px;letter-spacing:.02em;}
   .act-item{display:flex;align-items:center;gap:13px;background:var(--card);border:1.5px solid var(--line);
@@ -3100,6 +3114,34 @@ window.bmSetPeriod=function(el,p){
 function speechSupported(){
   return !!(window.SpeechRecognition||window.webkitSpeechRecognition);
 }
+/* 빠른 종목 선택 목록 (유산소 / 무산소) */
+const EX_PICKS={
+  ae:['러닝','사이클','축구','등산','수영','하이록스','줄넘기','농구','걷기','테니스','배드민턴','로잉'],
+  an:['벤치프레스','스쿼트','데드리프트','숄더프레스','바벨로우','풀업','랫풀다운','레그프레스','런지','바이셉컬','딥스','푸쉬업']
+};
+function renderQuickPicks(){
+  const rec=document.getElementById('vqRecent'), list=document.getElementById('vqList');
+  const cat=state.vqCat||'ae';
+  document.querySelectorAll('#vQuick .vq-cat').forEach(b=>b.classList.toggle('on',b.dataset.cat===cat));
+  if(rec){
+    const recent=[...new Set((state.workouts||[]).map(w=>w.exercise).filter(Boolean))].slice(0,8);
+    rec.innerHTML=recent.length
+      ? `<div class="vq-h">최근 기록</div><div class="vq-row">${recent.map(n=>`<button class="vq-chip recent" data-ex="${esc(n)}">${esc(n)}</button>`).join('')}</div>`
+      : '';
+  }
+  if(list){
+    list.innerHTML=`<div class="vq-h">${cat==='ae'?'유산소':'무산소'} 종목</div><div class="vq-row">${EX_PICKS[cat].map(n=>`<button class="vq-chip" data-ex="${n}">${n}</button>`).join('')}</div>`;
+  }
+  document.querySelectorAll('#vQuick .vq-chip').forEach(b=>b.onclick=()=>pickExercise(b.dataset.ex));
+}
+function pickExercise(name){
+  const vi=document.getElementById('vInput'); if(!vi)return;
+  const cur=(vi.value||'').trim();
+  vi.value=(cur?cur+' ':'')+name+' ';
+  state.voiceDraft=vi.value;
+  vi.focus();
+}
+
 function renderVoice(){
   const wrap=document.getElementById('voiceWrap');
   if(!wrap)return;
@@ -3147,8 +3189,16 @@ function renderVoice(){
         </svg>
       </button>
       <div class="voice-hint" id="voiceHint">${sup?VOICE_HINT_DEFAULT:'이 브라우저는 음성 미지원 — 아래에 타이핑하세요'}</div>
+      <div class="vquick" id="vQuick" style="display:none">
+        <div class="vq-recent" id="vqRecent"></div>
+        <div class="vq-cats">
+          <button class="vq-cat" data-cat="ae">🏃 유산소</button>
+          <button class="vq-cat" data-cat="an">🏋️ 무산소</button>
+        </div>
+        <div class="vq-list" id="vqList"></div>
+      </div>
       <div class="v-type-row">
-        <textarea id="vInput" rows="1" enterkeyhint="send" placeholder="또는, 여기에 타이핑하세요"></textarea>
+        <textarea id="vInput" rows="1" enterkeyhint="send" placeholder="또는, 여기에 타이핑하세요 (탭하면 종목 선택)"></textarea>
         <button class="v-send" id="vSend">전송</button>
       </div>
       ${state.voiceChat.length?'<button class="ai-clear" id="voiceClear" style="margin:14px auto 0;display:block">⌂ 첫화면으로 돌아가기</button>':''}
@@ -3161,6 +3211,7 @@ function renderVoice(){
   wireLogCards();
   /* 타이핑 입력 */
   const vi=document.getElementById('vInput'), vs=document.getElementById('vSend');
+  const vq=document.getElementById('vQuick');
   if(vi&&vs){
     vi.value=state.voiceDraft||'';
     vi.oninput=()=>{state.voiceDraft=vi.value;};
@@ -3168,11 +3219,19 @@ function renderVoice(){
       const t=vi.value.trim();
       if(!t)return;
       state.voiceDraft='';vi.value='';
+      if(vq)vq.style.display='none';
       stopVoice(); /* 음성 출력 중이면 중지 */
       voiceAsk(t,false); /* 타이핑 질문엔 소리로 답하지 않음 */
     };
     vs.onclick=sendTyped;
     vi.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendTyped();}};
+    /* 입력창을 탭하면 빠른 종목 선택 패널 표시 */
+    if(vq){
+      const showQuick=()=>{ if(vq.style.display==='none'){vq.style.display='block';renderQuickPicks();} };
+      vi.addEventListener('focus',showQuick);
+      vi.addEventListener('click',showQuick);
+      vq.querySelectorAll('.vq-cat').forEach(b=>b.onclick=()=>{state.vqCat=b.dataset.cat;renderQuickPicks();});
+    }
   }
   const vc=document.getElementById('voiceClear');
   if(vc)vc.onclick=()=>{stopVoice();state.voiceChat=[];renderVoice();};
